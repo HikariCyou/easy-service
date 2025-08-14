@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>{{ title or "雇用契約書" }}</title>
+<style>
+  body {
+    font-family: "Noto Sans CJK JP", "Noto Sans JP", "IPAexGothic", Meiryo, sans-serif;
+    font-size: 13px;
+    margin: 40px;
+    line-height: 1.8;
+    color: #000;
+  }
+  h1 {
+    text-align: center;
+    font-size: 18px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 5px;
+  }
+  .section-title {
+    font-weight: bold;
+    margin-top: 20px;
+    font-size: 14px;
+    border-left: 4px solid #000;
+    padding-left: 6px;
+  }
+  p {
+    margin: 4px 0;
+  }
+  table.contract-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    margin-bottom: 20px;
+  }
+  table.contract-table th,
+  table.contract-table td {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  table.contract-table th {
+    background-color: #f0f0f0;
+    width: 30%;
+  }
+  .signature-block {
+    margin-top: 40px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .signature-block .left,
+  .signature-block .right {
+    width: 48%;
+  }
+  .small-text {
+    font-size: 11px;
+    color: #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>雇用契約書</h1>
+
+<p style="text-align:right;">{{ contract_date or "2025年06月01日" }}</p>
+
+<div class="signature-block">
+  <div class="left">
+    <p>株式会社TOB</p>
+    <p>住所：東京都千代田区神田神保町3-2-28<br>ACN神保町ビル9階</p>
+    <p>代表取締役　王 団傑　㊞</p>
+  </div>
+  <div class="right">
+    <p>労働者 氏名：{{ employee_name }}　㊞</p>
+    <p>住所：{{ employee_address }}</p>
+  </div>
+</div>
+
+<div class="section-title">1. 契約期間</div>
+<table class="contract-table">
+  <tr>
+    <th>期間</th>
+    <td>{{ contract_start }} から {{ contract_end }} まで</td>
+  </tr>
+</table>
+
+<div class="section-title">2. 更新</div>
+<table class="contract-table">
+  <tr>
+    <th>契約更新の有無</th>
+    <td>{{ renewal_possibility or "更新する場合あり" }}</td>
+  </tr>
+  <tr>
+    <th>判断基準</th>
+    <td>業務量、進捗状況、能力・成績・勤務態度、経営状況 等</td>
+  </tr>
+  <tr>
+    <th>更新上限</th>
+    <td>{{ renewal_limit or "無" }}</td>
+  </tr>
+</table>
+
+<div class="section-title">3. 無期転換</div>
+<p>本契約期間中に申込みがあった場合、{{ muki_start or "2027年05月01日" }}より無期雇用へ転換。労働条件変更：{{ muki_change or "無" }}</p>
+
+<div class="section-title">4. 試用期間</div>
+<p>採用日から{{ probation_period or "4箇月間" }}。必要に応じ延長あり。</p>
+
+<div class="section-title">5. 勤務条件</div>
+<table class="contract-table">
+  <tr>
+    <th>勤務場所</th>
+    <td>{{ work_location or "会社の規定による" }}</td>
+  </tr>
+  <tr>
+    <th>業務内容</th>
+    <td>{{ job_description or "アプリ運営と営業" }}</td>
+  </tr>
+  <tr>
+    <th>勤務時間・休憩</th>
+    <td>会社規定による</td>
+  </tr>
+  <tr>
+    <th>所定外労働</th>
+    <td>{{ overtime or "有" }}</td>
+  </tr>
+  <tr>
+    <th>休日</th>
+    <td>{{ holidays or "土日・祝日" }}</td>
+  </tr>
+</table>
+
+<div class="section-title">6. 賃金</div>
+<table class="contract-table">
+  <tr>
+    <th>基本賃金</th>
+    <td>{{ base_salary or "月給200000円（通勤費別途支給 上限あり）" }}</td>
+  </tr>
+  <tr>
+    <th>支払い方法</th>
+    <td>銀行振込（金融機関休業日は翌営業日）</td>
+  </tr>
+  <tr>
+    <th>締切・支払日</th>
+    <td>締切：{{ closing_date or "月末" }}　支払：{{ payment_date or "翌月25日" }}</td>
+  </tr>
+  <tr>
+    <th>昇給・賞与</th>
+    <td>昇給：{{ salary_increase or "有" }}　賞与：{{ bonus or "有 年X回" }}</td>
+  </tr>
+  <tr>
+    <th>退職金</th>
+    <td>{{ retirement_pay or "無" }}</td>
+  </tr>
+</table>
+
+<div class="section-title">7. その他</div>
+<p>社会保険：{{ social_insurance or "厚生年金 無・健康保険 無" }}<br>
+雇用保険・労災保険：{{ employment_insurance or "有" }}</p>
+<p class="small-text">
+※ 退職後も機密情報・顧客情報・個人情報の漏洩禁止 等
+</p>
+
+</body>
+</html>

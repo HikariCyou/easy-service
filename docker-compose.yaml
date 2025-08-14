@@ -1,0 +1,22 @@
+version: '3'
+
+networks:
+  app-tier:
+    driver: bridge
+
+services:
+  hr:
+    build:
+      context: ./easywork-hr
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./easywork-hr:/app
+
+  ses:
+    build:
+      context: ./easywork-ses
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./easywork-ses:/app
