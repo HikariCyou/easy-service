@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Query, Body
 
 from app.controllers.employee_evaluation import employee_evaluation_controller
-from app.controllers.employee import employee_controller
+from app.controllers.personnel_unified import personnel_controller
 from app.schemas import Success, Fail
 from app.schemas.employee_evaluation import (
     CreateEmployeeEvaluationSchema,
@@ -172,7 +172,7 @@ async def get_employee_evaluations(
 ):
     """特定社員の評価一覧を取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="社員が見つかりません")
 
@@ -194,7 +194,7 @@ async def create_employee_evaluation(
 ):
     """特定社員の評価を作成"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="社員が見つかりません")
 
@@ -218,7 +218,7 @@ async def create_employee_evaluation(
 async def get_employee_evaluation_summary(employee_id: int):
     """特定社員の評価サマリーを取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="社員が見つかりません")
 

@@ -8,9 +8,7 @@ from pydantic import BaseModel, Field
 class CreateContract(BaseModel):
     contract_type: str = Field(..., description="契約種別（BP/自社/フリーランス）", examples=["BP", "自社", "フリーランス"])
     case_id: int = Field(..., description="案件ID", examples=[1])
-    bp_employee_id: Optional[int] = Field(None, description="BP担当者ID", examples=[1])
-    employee_id: Optional[int] = Field(None, description="自社担当者ID", examples=[1])
-    freelancer_id: Optional[int] = Field(None, description="フリーランスID", examples=[1])
+    personnel_id: int = Field(..., description="要員ID（統一Personnel）", examples=[1])
     contract_start_date: Optional[date] = Field(None, description="契約開始日", examples=["2022-01-01"])
     contract_end_date: Optional[date] = Field(None, description="契約終了日", examples=["2022-12-31"])
     unit_price: Optional[float] = Field(None, description="単価", examples=["10000"])

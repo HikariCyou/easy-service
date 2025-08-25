@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     VERSION: str = "0.1.0"
-    APP_TITLE: str = "Tob人事システム"
+    APP_TITLE: str = "SESシステム"
     PROJECT_NAME: str = "Tob-HR"
     APP_DESCRIPTION: str = "Description"
 

@@ -13,8 +13,7 @@ router = APIRouter()
 @router.get("/list", summary="契約一覧取得")
 async def get_contract_list(
     keyword: Optional[str] = Query(None, max_length=50),
-    employee_type: Optional[str] = Query(None, description="要員タイプ", regex="^(bp_employee|freelancer|employee)$"),
-    employee_id: Optional[int] = Query(None, ge=1),
+    personnel_id: Optional[int] = Query(None, ge=1, description="要員ID"),
     page: Optional[int] = Query(1, ge=1),
     pageSize: Optional[int] = Query(10, ge=1, le=100),
     case_id: Optional[int] = Query(None, ge=1)
@@ -23,15 +22,8 @@ async def get_contract_list(
         q = Q()
         if keyword:
             q &= Q(contract_number__icontains=keyword) | Q(case__title__icontains=keyword)
-        if employee_id:
-            if employee_type == "bp_employee":
-                q &= Q(bp_employee_id=employee_id)
-            elif employee_type == "employee":
-                q &= Q(employee_id=employee_id)
-            elif employee_type == "freelancer":
-                q &= Q(freelancer_id=employee_id)
-            else:
-                return Fail(msg="要員タイプが不正です")
+        if personnel_id:
+            q &= Q(personnel_id=personnel_id)
         if case_id:
             q &= Q(case_id=case_id)
 

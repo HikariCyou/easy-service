@@ -18,11 +18,13 @@ class Contract(BaseModel, TimestampMixin):
 
     # 関連
     case = fields.ForeignKeyField("models.Case", related_name="contracts", description="案件")
-    bp_employee = fields.ForeignKeyField("models.BPEmployee", null=True, related_name="contracts", description="BP社員")
-    employee = fields.ForeignKeyField("models.Employee", null=True, related_name="contracts", description="自社社員")
-    freelancer = fields.ForeignKeyField(
-        "models.Freelancer", null=True, related_name="contracts", description="フリーランス"
-    )
+    # 統一Personnel使用（polymorphic reference）
+    personnel = fields.ForeignKeyField("models.Personnel", null=True, related_name="contracts", description="契約人材")
+    
+    # 下記フィールドは後方互換性のため保留（新統一システムではpersonnelを使用）
+    # bp_employee = fields.ForeignKeyField("models.BPEmployee", null=True, related_name="contracts", description="BP社員")
+    # employee = fields.ForeignKeyField("models.Employee", null=True, related_name="contracts", description="自社社員")
+    # freelancer = fields.ForeignKeyField("models.Freelancer", null=True, related_name="contracts", description="フリーランス")
 
     # 契約期間
     contract_start_date = fields.DateField(description="契約開始日")
@@ -43,19 +45,16 @@ class Contract(BaseModel, TimestampMixin):
     )
 
     # 超過・不足時の処理
-    overtime_rate = fields.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal("1.25"), description="超過時間単価倍率"
+    overtime_rate = fields.FloatField(null=True,default=float("1.00"), description="超過時間単価倍率"
     )
-    shortage_rate = fields.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal("1.00"), description="不足時間単価倍率"
+    shortage_rate = fields.FloatField(null=True, default=float("1.00"), description="不足時間単価倍率"
     )
 
     # 超過・不足時間の計算基準
-    min_guaranteed_hours = fields.DecimalField(
-        max_digits=5, decimal_places=1, null=True, description="最低保証時間（この時間までは満額支払い）"
+    min_guaranteed_hours = fields.FloatField(
+        null=True, description="最低保証時間（この時間までは満額支払い）"
     )
-    free_overtime_hours = fields.DecimalField(
-        max_digits=5, decimal_places=1, default=Decimal("0.0"), description="無償残業時間（この時間までは追加料金なし）"
+    free_overtime_hours = fields.FloatField(default=float("0.0"), description="無償残業時間（この時間までは追加料金なし）"
     )
 
     # ステータス
@@ -86,12 +85,8 @@ class Contract(BaseModel, TimestampMixin):
     @property
     def contractor_name(self) -> str:
         """契約者名を取得"""
-        if self.bp_employee:
-            return self.bp_employee.name
-        elif self.employee:
-            return self.employee.name
-        elif self.freelancer:
-            return self.freelancer.name
+        if self.personnel:
+            return self.personnel.name
         return "不明"
 
     def calculate_monthly_payment(self, actual_hours: Decimal) -> dict:

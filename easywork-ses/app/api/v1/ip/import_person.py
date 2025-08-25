@@ -93,7 +93,6 @@ async def get_staff_list(
 @router.get("/get", response_model=ImportPersonDetailSchema, summary="要員詳細取得")
 async def get_staff_detail(
     id: int = Query(..., description="要員ID"),
-    person_type: Optional[str] = Query(None, description="要員タイプ", regex="^(bp_employee|freelancer|employee)$")
 ):
     """
     要員詳細を取得（履歴付き）
@@ -103,8 +102,7 @@ async def get_staff_detail(
     """
     try:
         detail = await import_person_controller.get_staff_detail(
-            person_id=id,
-            person_type=person_type
+            person_id=id
         )
         
         if not detail:
@@ -118,7 +116,6 @@ async def get_staff_detail(
 @router.get("/history", response_model=List[ImportPersonHistorySchema], summary="要員作業履歴取得")
 async def get_staff_history(
     id: int = Query(..., description="要員ID"),
-    person_type: Optional[str] = Query(None, description="要員タイプ", regex="^(bp_employee|freelancer|employee)$"),
     page: Optional[int] = Query(1, description="ページ番号"),
     pageSize: Optional[int] = Query(10, description="ページサイズ")
 ):
@@ -134,7 +131,6 @@ async def get_staff_history(
     try:
         history , total = await import_person_controller.get_staff_history(
             person_id=id,
-            person_type=person_type,
             page = page,
             page_size= pageSize
         )
@@ -147,7 +143,6 @@ async def get_staff_history(
 @router.get("/current-assignments", response_model=ImportPersonCurrentAssignmentSchema, summary="要員現在のアサイン情報取得")
 async def get_staff_current_assignments(
     id: int = Query(..., description="要員ID"),
-    person_type: Optional[str] = Query(None, description="要員タイプ", regex="^(bp_employee|freelancer|employee)$")
 ):
     """
     要員の現在の案件と契約情報を取得
@@ -161,7 +156,6 @@ async def get_staff_current_assignments(
     try:
         assignments = await import_person_controller.get_staff_current_assignments(
             person_id=id,
-            person_type=person_type
         )
         
         if not assignments:

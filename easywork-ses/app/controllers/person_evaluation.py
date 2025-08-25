@@ -364,16 +364,8 @@ class PersonEvaluationController:
     # ===== 内部补助メソッド =====
     async def _get_person_by_type_and_id(self, person_type: PersonType, person_id: int):
         """人材タイプとIDから人材オブジェクトを取得"""
-        if person_type == PersonType.BP_EMPLOYEE:
-            from app.models.bp import BPEmployee
-            return await BPEmployee.get_or_none(id=person_id)
-        elif person_type == PersonType.FREELANCER:
-            from app.models.freelancer import Freelancer
-            return await Freelancer.get_or_none(id=person_id)
-        elif person_type == PersonType.EMPLOYEE:
-            from app.models.employee import Employee
-            return await Employee.get_or_none(id=person_id)
-        return None
+        from app.models.personnel import Personnel
+        return await Personnel.get_or_none(id=person_id, person_type=person_type)
 
     def _build_search_query(self, search_params: Dict) -> Q:
         """検索クエリ構築"""

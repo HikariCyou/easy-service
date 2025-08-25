@@ -43,7 +43,7 @@ class ContractController:
 
     async def list_contracts(self, page:int = 1, page_size:int = 10 , search: Q = Q(), orders:list = []):
         query = Contract.filter(search).prefetch_related(
-            'case', 'bp_employee', 'employee', 'freelancer'
+            'case', 'personnel'
         )
         total = await Contract.filter(search).count()
         contracts = await query.order_by(*orders).limit(page_size).offset((page - 1) * page_size).all()
@@ -62,13 +62,9 @@ class ContractController:
                 if contract.case:
                     contract_dict['case'] = await contract.case.to_dict()
                 
-                # 根据契约类型添加对应的员工信息
-                if contract.bp_employee:
-                    contract_dict['bp_employee'] = await contract.bp_employee.to_dict()
-                elif contract.employee:
-                    contract_dict['employee'] = await contract.employee.to_dict()
-                elif contract.freelancer:
-                    contract_dict['freelancer'] = await contract.freelancer.to_dict()
+                # 添加统一Personnel信息
+                if contract.personnel:
+                    contract_dict['personnel'] = await contract.personnel.to_dict()
                 
                 # 添加计算属性
                 contract_dict['is_active'] = contract.is_active
@@ -91,13 +87,9 @@ class ContractController:
             if contract.case:
                 contract_dict['case'] = await contract.case.to_dict()
             
-            # 根据契约类型添加对应的员工信息
-            if contract.bp_employee:
-                contract_dict['bp_employee'] = await contract.bp_employee.to_dict()
-            elif contract.employee:
-                contract_dict['employee'] = await contract.employee.to_dict()
-            elif contract.freelancer:
-                contract_dict['freelancer'] = await contract.freelancer.to_dict()
+            # 添加统一Personnel信息
+            if contract.personnel:
+                contract_dict['personnel'] = await contract.personnel.to_dict()
             
             # 添加计算属性
             contract_dict['is_active'] = contract.is_active
@@ -107,7 +99,7 @@ class ContractController:
 
     async  def get_contract(self, id):
         contract = await Contract.get_or_none(id=id).prefetch_related(
-            'case', 'bp_employee', 'employee', 'freelancer'
+            'case', 'personnel'
         )
         return contract
 
@@ -126,26 +118,14 @@ class ContractController:
         )
         return contract is None
 
-    async def check_bp_employee_contract(self, bp_employee_id):
-        return await self.check_active_contract(bp_employee_id=bp_employee_id)
-
-    async def check_employee_contract(self, employee_id):
-        return await self.check_active_contract(employee_id=employee_id)
-
-    async def check_freelancer_contract(self, freelancer_id):
-        return await self.check_active_contract(freelancer_id=freelancer_id)
+    async def check_personnel_contract(self, personnel_id):
+        return await self.check_active_contract(personnel_id=personnel_id)
 
 
 
     async def create_contract(self, contract_data:CreateContract):
         # 契約者は有効状態の契約をあるかどうかを確認する
-        can_contract = False
-        if contract_data.bp_employee_id:
-           can_contract = await self.check_bp_employee_contract(contract_data.bp_employee_id)
-        elif contract_data.employee_id:
-            can_contract = await self.check_employee_contract(contract_data.employee_id)
-        elif contract_data.freelancer_id:
-            can_contract = await self.check_freelancer_contract(contract_data.freelancer_id)
+        can_contract = await self.check_personnel_contract(contract_data.personnel_id)
 
         if not can_contract:
             raise Exception("契約者が有効な契約を保有しています。")

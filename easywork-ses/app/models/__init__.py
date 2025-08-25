@@ -3,8 +3,8 @@ from .bp import *
 from .case import *
 from .client import *
 from .contract import *
-from .employee import *
+from .enums import *
 from .evaluation import *
-from .freelancer import *
+from .personnel import *
 from .skill import *
 from .storage import *

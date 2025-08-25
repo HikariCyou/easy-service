@@ -2,7 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.controllers.bp import bp_employee_controller
+from app.controllers.personnel_unified import personnel_controller
 from app.schemas import Fail, Success
 from app.schemas.bp import ActiveBpEmployeeSchema, UpdateBPEmployeeSchema
 from app.schemas.skill import (AddBPEmployeeSkillSchema, UpdateBPEmployeeSkillSchema)
@@ -17,10 +17,11 @@ async def get_bp_employees_list(
     name: Optional[str] = Query(None),
 ):
     try:
-        data, total = await bp_employee_controller.list_bp_employees_with_filters(
-            page=page, page_size=pageSize, name=name
+        search_params = {"name": name} if name else None
+        bp_employee_data, total = await personnel_controller.list_bp_employees(
+            page=page, page_size=pageSize, search_params=search_params
         )
-        return Success(data=data, total=total)
+        return Success(data=bp_employee_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -28,9 +29,9 @@ async def get_bp_employees_list(
 @router.get("/get", summary="idで協力会社要員取得")
 async def get_bp_employee(id: int):
     try:
-        data = await bp_employee_controller.get_bp_employee_dict_by_id(bp_employee_id=id)
-        if data:
-            return Success(data=data)
+        bp_employee_data = await personnel_controller.get_bp_employee_by_id(id)
+        if bp_employee_data:
+            return Success(data=bp_employee_data)
         else:
             return Fail(msg="要員が見つかりませんでした")
     except Exception as e:
@@ -40,11 +41,10 @@ async def get_bp_employee(id: int):
 @router.post("/add", summary="協力会社要員の新規")
 async def add_bp_employee(bp_employee_data: UpdateBPEmployeeSchema):
     try:
-        data = await bp_employee_controller.add_bp_employee_dict(bp_employee=bp_employee_data)
-        if data:
-            return Success(msg="要員情報を登録しました", data=data)
-        else:
-            return Fail(msg="要員情報の登録に失敗しました")
+        bp_employee_dict = bp_employee_data.model_dump(exclude_none=True)
+        bp_employee = await personnel_controller.create_bp_employee(bp_employee_dict)
+        data = await bp_employee.to_dict()
+        return Success(msg="要員情報を登録しました", data=data)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -57,8 +57,14 @@ async def active_bp_employee(schema: ActiveBpEmployeeSchema):
 @router.put("/update", summary="協力会社の要員情報更新")
 async def update_bp_employee(bp_employee_data: UpdateBPEmployeeSchema):
     try:
-        data = await bp_employee_controller.update_bp_employee_dict(bp_employee=bp_employee_data)
-        if data:
+        bp_employee_dict = bp_employee_data.model_dump(exclude_none=True)
+        bp_employee_id = bp_employee_dict.pop('id', None)
+        if not bp_employee_id:
+            return Fail(msg="要員IDが必要です")
+        
+        bp_employee = await personnel_controller.update_bp_employee(bp_employee_id, bp_employee_dict)
+        if bp_employee:
+            data = await bp_employee.to_dict()
             return Success(msg="要員情報を更新しました", data=data)
         else:
             return Fail(msg="要員が見つかりませんでした")
@@ -69,8 +75,11 @@ async def update_bp_employee(bp_employee_data: UpdateBPEmployeeSchema):
 @router.delete("/delete", summary="協力会社の要員情報削除")
 async def delete_bp_employee(id: int):
     try:
-        await bp_employee_controller.delete_bp_employee(bp_employee_id=id)
-        return Success(msg="要員情報を削除しました")
+        success = await personnel_controller.delete_bp_employee(id)
+        if success:
+            return Success(msg="要員情報を削除しました")
+        else:
+            return Fail(msg="要員が見つかりません")
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -87,12 +96,21 @@ async def get_bp_employee_skills_list(
     pageSize: Optional[int] = Query(10, ge=1, le=100),
 ):
     try:
-        data, total = await bp_employee_controller.get_skills_with_details(
-            employee_id=employee_id, page=page, pageSize=pageSize
-        )
-        if data is None:
+        bp_employee = await personnel_controller.get_bp_employee_by_id(employee_id)
+        if not bp_employee:
             return Fail(msg="要員が見つかりません")
-        return Success(data=data, total=total)
+        
+        skills, total = await personnel_controller.get_personnel_skills(employee_id, page=page, page_size=pageSize)
+        
+        # スキルデータを辞書形式に変換
+        skills_data = []
+        for skill_relation in skills:
+            skill_dict = await skill_relation.to_dict()
+            if hasattr(skill_relation, 'skill') and skill_relation.skill:
+                skill_dict['skill'] = await skill_relation.skill.to_dict()
+            skills_data.append(skill_dict)
+        
+        return Success(data=skills_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -100,10 +118,17 @@ async def get_bp_employee_skills_list(
 @router.get("/skills/get", summary="IDで協力会社要員のスキル取得")
 async def get_bp_employee_skill(skill_id: int):
     try:
-        data = await bp_employee_controller.get_skill_by_id(skill_id=skill_id)
-        if not data:
+        from app.models.personnel import PersonnelSkill
+        
+        skill_relation = await PersonnelSkill.get_or_none(id=skill_id).select_related("skill", "personnel")
+        if not skill_relation:
             return Fail(msg="スキル記録が見つかりません")
-        return Success(data=data)
+        
+        skill_dict = await skill_relation.to_dict()
+        if hasattr(skill_relation, 'skill') and skill_relation.skill:
+            skill_dict['skill'] = await skill_relation.skill.to_dict()
+        
+        return Success(data=skill_dict)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -111,10 +136,25 @@ async def get_bp_employee_skill(skill_id: int):
 @router.post("/skills/add", summary="協力会社要員のスキル追加")
 async def add_bp_employee_skill(skill_data: AddBPEmployeeSkillSchema):
     try:
-        data, error_msg = await bp_employee_controller.add_skill_with_validation(skill_data=skill_data)
-        if error_msg:
-            return Fail(msg=error_msg)
-        return Success(msg="スキルを追加しました", data=data)
+        skill_dict = skill_data.model_dump(exclude_none=True)
+        employee_id = skill_dict.get('employee_id') or skill_dict.get('bp_employee_id')
+        
+        if not employee_id:
+            return Fail(msg="要員IDが必要です")
+        
+        bp_employee = await personnel_controller.get_bp_employee_by_id(employee_id)
+        if not bp_employee:
+            return Fail(msg="要員が見つかりません")
+        
+        skill_relation = await personnel_controller.add_personnel_skill(employee_id, skill_dict)
+        
+        result = await skill_relation.to_dict()
+        if hasattr(skill_relation, 'skill') and skill_relation.skill:
+            result['skill'] = await skill_relation.skill.to_dict()
+        
+        return Success(msg="スキルを追加しました", data=result)
+    except ValueError as e:
+        return Fail(msg=str(e))
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -122,10 +162,21 @@ async def add_bp_employee_skill(skill_data: AddBPEmployeeSkillSchema):
 @router.put("/skills/update", summary="協力会社要員のスキル更新")
 async def update_bp_employee_skill(skill_data: UpdateBPEmployeeSkillSchema):
     try:
-        data, error_msg = await bp_employee_controller.update_skill(skill_data)
-        if error_msg:
-            return Fail(msg=error_msg)
-        return Success(msg="スキルを更新しました", data=data)
+        skill_dict = skill_data.model_dump(exclude_none=True)
+        skill_id = skill_dict.pop('id', None)
+        
+        if not skill_id:
+            return Fail(msg="スキルIDが必要です")
+        
+        skill_relation = await personnel_controller.update_personnel_skill(skill_id, skill_dict)
+        
+        result = await skill_relation.to_dict()
+        if hasattr(skill_relation, 'skill') and skill_relation.skill:
+            result['skill'] = await skill_relation.skill.to_dict()
+        
+        return Success(msg="スキルを更新しました", data=result)
+    except ValueError as e:
+        return Fail(msg=str(e))
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -133,9 +184,10 @@ async def update_bp_employee_skill(skill_data: UpdateBPEmployeeSkillSchema):
 @router.delete("/skills/delete", summary="協力会社要員のスキル削除")
 async def delete_bp_employee_skill(skill_id: int):
     try:
-        success, error_msg = await bp_employee_controller.delete_skill(skill_id=skill_id)
-        if not success:
-            return Fail(msg=error_msg)
-        return Success(msg="スキルを削除しました")
+        success = await personnel_controller.delete_personnel_skill(skill_id)
+        if success:
+            return Success(msg="スキルを削除しました")
+        else:
+            return Fail(msg="スキルが見つかりません")
     except Exception as e:
         return Fail(msg=str(e))

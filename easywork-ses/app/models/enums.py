@@ -177,12 +177,14 @@ class ContractType(StrEnum):
 class AttendanceType(StrEnum):
     NORMAL = "通常出勤"  # 通常出勤
     PAID_LEAVE = "有給休暇"  # 有給休暇
+    PAID_LEAVE_HALF = "有給休暇（半休）"  # 有給休暇（半休）
     SICK_LEAVE = "病気休暇"  # 病気休暇
     ABSENCE = "欠勤"  # 欠勤
-    LATE = "遅刻"  # 遅刻
-    EARLY_LEAVE = "早退"  # 早退
     HOLIDAY_WORK = "休日出勤"  # 休日出勤
-    REMOTE_WORK = "リモートワーク"  # リモートワーク
+    COMPENSATORY_LEAVE = "振休"  # 振休
+
+
+
 
 
 # 追加のEnum定義
@@ -218,3 +220,48 @@ class PersonType(StrEnum):
     BP_EMPLOYEE = "bp_employee"  # BP社員
     FREELANCER = "freelancer"  # フリーランス
     EMPLOYEE = "employee"  # 自社社員
+    @classmethod
+    def get_label(cls, value: str) -> str:
+        return _PERSON_TYPE_LABELS.get(value, value)
+
+_PERSON_TYPE_LABELS = {
+    PersonType.BP_EMPLOYEE: "BP社員",
+    PersonType.FREELANCER: "個人事業主",
+    PersonType.EMPLOYEE: "自社社員",
+}
+
+
+class ChangeType(StrEnum):
+    CREATE = "create"  # 作成
+    UPDATE = "update"  # 更新
+    DELETE = "delete"  # 削除
+    STATUS_CHANGE = "status_change"  # ステータス変更
+    CANDIDATE_ADD = "candidate_add"  # 候補者追加
+    CANDIDATE_REMOVE = "candidate_remove"  # 候補者削除
+    CANDIDATE_UPDATE = "candidate_update"  # 候補者更新
+
+class ApproveStatus(StrEnum):
+    PENDING="PENDING"
+    APPROVED = "APPROVED",
+    REJECT= "REJECT",
+    WITHDRAWN = "WITHDRAWN"
+
+
+class WeeklyMoodStatus(StrEnum):
+    """週間心情状态枚举"""
+    EXCELLENT = "excellent"  # 😄 优秀/非常好
+    GOOD = "good"           # 😊 良好
+    NORMAL = "normal"       # 😐 一般
+    STRESSED = "stressed"   # 😰 有压力
+    TIRED = "tired"         # 😴 疲劳
+    DIFFICULT = "difficult" # 😞 困难/不好
+
+
+class MonthlySubmissionStatus(StrEnum):
+    """月度考勤提交状态枚举"""
+    DRAFT = "draft"         # 草稿（未提交）
+    SUBMITTED = "submitted" # 已提交
+    WITHDRAWN = "withdrawn" # 已撤回（可继续修改）
+    APPROVED = "approved"   # 已批准（不可修改）
+    REJECTED = "rejected"   # 已拒绝（可修改重新提交）
+

@@ -1,6 +1,6 @@
 import asyncio
 import decimal
-from datetime import datetime
+from datetime import datetime, date, time, timedelta
 
 from tortoise import fields, models
 
@@ -20,6 +20,12 @@ class BaseModel(models.Model):
                 value = getattr(self, field)
                 if isinstance(value, datetime):
                     value = value.strftime(settings.DATETIME_FORMAT)
+                elif isinstance(value, date):
+                    value = value.isoformat()
+                elif isinstance(value, time):
+                    value = value.strftime("%H:%M:%S")
+                elif isinstance(value, timedelta):
+                    value = str(value)  # 或者 int(value.total_seconds())
                 elif isinstance(value, decimal.Decimal):
                     value = float(value)
                 d[field] = value
@@ -46,8 +52,14 @@ class BaseModel(models.Model):
                 if k not in exclude_fields:
                     if isinstance(v, datetime):
                         formatted_value[k] = v.strftime(settings.DATETIME_FORMAT)
-                    elif isinstance(value, decimal.Decimal):
-                        value = float(value)
+                    elif isinstance(v, date):
+                        formatted_value[k] = v.isoformat()
+                    elif isinstance(v, time):
+                        formatted_value[k] = v.strftime("%H:%M:%S")
+                    elif isinstance(v, timedelta):
+                        formatted_value[k] = str(v)
+                    elif isinstance(v, decimal.Decimal):
+                        formatted_value[k] = float(v)
                     else:
                         formatted_value[k] = v
             formatted_values.append(formatted_value)

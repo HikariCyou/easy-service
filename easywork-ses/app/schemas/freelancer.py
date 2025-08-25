@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class CreateFreelancerSchema(BaseModel):
     """フリーランサー作成schema"""
-
+    user_id: Optional[int] = Field(None, description="ユーザーID")
     # 基本情報
     name: str = Field(..., description="氏名", example="田中太郎")
     code: Optional[str] = Field(None, description="フリーランサーコード", example="FL001")
@@ -77,6 +77,7 @@ class CreateFreelancerSchema(BaseModel):
 
 class UpdateFreelancerSchema(BaseModel):
     """フリーランサー更新schema"""
+    user_id: Optional[int] = Field(None, description="ユーザーID")
 
     # 基本情報
     name: Optional[str] = Field(None, description="氏名", example="田中太郎")

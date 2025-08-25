@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
-from app.controllers.employee import employee_controller
+from app.controllers.personnel_unified import personnel_controller
 from app.schemas import Fail, Success
 from app.schemas.employee import (
     CreateEmployeeSchema,
@@ -28,11 +28,10 @@ async def get_employee_list(
 ):
     """従業員一覧を取得"""
     try:
-        employees, total = await employee_controller.list_employees(
-            page=page, page_size=pageSize, include_skills=include_skills
+        employee_data, total = await personnel_controller.list_employees(
+            page=page, page_size=pageSize
         )
-        data = await employee_controller.employees_to_dict(employees, include_relations=include_skills)
-        return Success(data=data, total=total)
+        return Success(data=employee_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -45,11 +44,10 @@ async def search_employees(
 ):
     """従業員の高度検索"""
     try:
-        employees, total = await employee_controller.search_employees(
-            search_params.model_dump(exclude_none=True), page=page, page_size=pageSize
+        employee_data, total = await personnel_controller.list_employees(
+            page=page, page_size=pageSize, search_params=search_params.model_dump(exclude_none=True)
         )
-        data = await employee_controller.employees_to_dict(employees, include_relations=True)
-        return Success(data=data, total=total)
+        return Success(data=employee_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -61,10 +59,9 @@ async def get_employee(
 ):
     """IDで従業員を取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(id, include_relations=include_relations)
-        if employee:
-            data = await employee_controller.employee_to_dict(employee, include_relations=include_relations)
-            return Success(data=data)
+        employee_data = await personnel_controller.get_employee_by_id(id)
+        if employee_data:
+            return Success(data=employee_data)
         else:
             return Fail(msg="従業員が見つかりません")
     except Exception as e:
@@ -78,9 +75,9 @@ async def get_employee_by_user(
 ):
     """ユーザーIDで従業員を取得"""
     try:
-        employee = await employee_controller.get_employee_by_user_id(user_id, include_relations=include_relations)
+        employee = await personnel_controller.get_employee_by_user_id(user_id)
         if employee:
-            data = await employee_controller.employee_to_dict(employee, include_relations=include_relations)
+            data = await employee.to_dict()
             return Success(data=data)
         else:
             return Fail(msg="従業員が見つかりません")
@@ -93,8 +90,8 @@ async def create_employee(data: CreateEmployeeSchema):
     """従業員を作成"""
     try:
         employee_data = data.model_dump(exclude_none=True)
-        employee = await employee_controller.create_employee(employee_data)
-        result = await employee_controller.employee_to_dict(employee, include_relations=True)
+        personnel = await personnel_controller.create_employee(employee_data)
+        result = await personnel.to_dict()
         return Success(data=result, msg="従業員が正常に作成されました")
     except ValidationError as e:
         return Fail(msg=f"バリデーションエラー: {e}")
@@ -110,9 +107,9 @@ async def update_employee(
     """従業員情報を更新"""
     try:
         employee_data = data.model_dump(exclude_none=True) if data else {}
-        employee = await employee_controller.update_employee(id, employee_data)
+        employee = await personnel_controller.update_employee(id, employee_data)
         if employee:
-            result = await employee_controller.employee_to_dict(employee, include_relations=True)
+            result = await employee.to_dict()
             return Success(data=result, msg="従業員情報が正常に更新されました")
         else:
             return Fail(msg="従業員が見つかりません")
@@ -126,8 +123,8 @@ async def update_employee(
 async def delete_employee(id: int = Query(..., description="従業員ID")):
     """従業員を削除"""
     try:
-        employee = await employee_controller.delete_employee(id)
-        if employee:
+        success = await personnel_controller.delete_employee(id)
+        if success:
             return Success(msg="従業員が正常に削除されました")
         else:
             return Fail(msg="従業員が見つかりません")
@@ -144,11 +141,11 @@ async def get_employee_skills(
 ):
     """従業員の技能一覧を取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
-        skills, total = await employee_controller.get_employee_skills(employee, page=page, page_size=pageSize)
+        skills, total = await personnel_controller.get_personnel_skills(employee_id, page=page, page_size=pageSize)
         
         # 技能データを辞書形式に変換
         skills_data = []
@@ -170,12 +167,12 @@ async def add_employee_skill(
 ):
     """従業員に技能を追加"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
         skill_data = data.model_dump(exclude_none=True) if data else {}
-        skill_relation = await employee_controller.add_employee_skill(employee, skill_data)
+        skill_relation = await personnel_controller.add_personnel_skill(employee_id, skill_data)
         
         # 結果を辞書形式に変換
         result = await skill_relation.to_dict()
@@ -197,7 +194,7 @@ async def update_employee_skill(
     """従業員技能を更新"""
     try:
         skill_data = data.model_dump(exclude_none=True) if data else {}
-        skill_relation = await employee_controller.update_employee_skill(skill_id, skill_data)
+        skill_relation = await personnel_controller.update_personnel_skill(skill_id, skill_data)
         
         # 結果を辞書形式に変換
         result = await skill_relation.to_dict()
@@ -215,8 +212,8 @@ async def update_employee_skill(
 async def delete_employee_skill(skill_id: int = Query(..., description="技能関連ID")):
     """従業員技能を削除"""
     try:
-        skill_relation = await employee_controller.delete_employee_skill(skill_id)
-        if skill_relation:
+        success = await personnel_controller.delete_personnel_skill(skill_id)
+        if success:
             return Success(msg="技能が正常に削除されました")
         else:
             return Fail(msg="技能が見つかりません")
@@ -231,15 +228,29 @@ async def batch_update_employee_skills(
 ):
     """従業員技能を一括更新"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
         skills_data = data.skills if data else []
-        await employee_controller.batch_update_employee_skills(employee, skills_data)
+        
+        # 統一Controllerには一括更新メソッドがないので、手動実装
+        from tortoise.transactions import in_transaction
+        from app.models.personnel import PersonnelSkill
+        
+        async with in_transaction():
+            # 既存スキル削除
+            await PersonnelSkill.filter(personnel_id=employee_id).delete()
+            
+            # 新しいスキル追加
+            for skill_item in skills_data:
+                try:
+                    await personnel_controller.add_personnel_skill(employee_id, skill_item)
+                except ValueError:
+                    continue
         
         # 更新後の技能一覧を取得
-        skills, total = await employee_controller.get_employee_skills(employee)
+        skills, total = await personnel_controller.get_personnel_skills(employee_id)
         skills_dict = []
         for skill_relation in skills:
             skill_dict = await skill_relation.to_dict()
@@ -261,11 +272,16 @@ async def get_employee_evaluations(
 ):
     """従業員の評価一覧を取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        from app.models.evaluation import PersonEvaluation
+        
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
-        evaluations, total = await employee_controller.get_employee_evaluations(employee, page=page, page_size=pageSize)
+        # 統一評価テーブルから取得
+        query = PersonEvaluation.filter(personnel_id=employee_id).select_related("case", "contract")
+        total = await query.count()
+        evaluations = await query.order_by("-evaluation_date", "-created_at").limit(pageSize).offset((page - 1) * pageSize).all()
         
         # 評価データを辞書形式に変換
         evaluations_data = []
@@ -290,12 +306,19 @@ async def create_employee_evaluation(
 ):
     """従業員評価を作成"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        from app.models.evaluation import PersonEvaluation
+        from tortoise.transactions import in_transaction
+        
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
         evaluation_data = data.model_dump(exclude_none=True) if data else {}
-        evaluation = await employee_controller.create_employee_evaluation(employee, evaluation_data, evaluator_id)
+        evaluation_data['personnel_id'] = employee_id
+        evaluation_data['evaluator_id'] = evaluator_id
+        
+        async with in_transaction():
+            evaluation = await PersonEvaluation.create(**evaluation_data)
         
         result = await evaluation.to_dict()
         return Success(data=result, msg="評価が正常に作成されました")
@@ -307,11 +330,35 @@ async def create_employee_evaluation(
 async def get_employee_evaluation_summary(employee_id: int = Query(..., description="従業員ID")):
     """従業員評価のサマリーを取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id)
+        from app.models.evaluation import PersonEvaluation
+        
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
-        summary = await employee_controller.get_employee_evaluation_summary(employee)
+        # 評価サマリー計算
+        evaluations = await PersonEvaluation.filter(personnel_id=employee_id).all()
+        
+        if not evaluations:
+            summary = {
+                "total_evaluations": 0,
+                "average_overall_rating": 0,
+                "average_technical_skill": 0,
+                "average_communication": 0,
+                "average_reliability": 0,
+                "recommendation_rate": 0,
+            }
+        else:
+            total = len(evaluations)
+            summary = {
+                "total_evaluations": total,
+                "average_overall_rating": round(sum(e.overall_rating for e in evaluations) / total, 2),
+                "average_technical_skill": round(sum(e.technical_skill for e in evaluations) / total, 2),
+                "average_communication": round(sum(e.communication for e in evaluations) / total, 2),
+                "average_reliability": round(sum(e.reliability for e in evaluations) / total, 2),
+                "recommendation_rate": round(sum(1 for e in evaluations if e.recommendation) / total * 100, 1),
+            }
+        
         return Success(data=summary)
     except Exception as e:
         return Fail(msg=str(e))
@@ -328,18 +375,18 @@ async def get_available_employees(
 ):
     """利用可能な従業員を取得（プロジェクト需求に基づく）"""
     try:
-        from decimal import Decimal
-        min_exp = Decimal(str(min_experience_years)) if min_experience_years else None
+        from app.models.enums import PersonType
         
-        employees, total = await employee_controller.get_available_employees(
+        employees, total = await personnel_controller.get_available_personnel(
+            person_type=PersonType.EMPLOYEE,
             project_start_date=project_start_date,
             required_skills=required_skills,
-            min_experience_years=min_exp,
+            min_experience_years=min_experience_years,
             page=page,
             page_size=pageSize,
         )
         
-        data = await employee_controller.employees_to_dict(employees, include_relations=True)
+        data = [await p.to_dict() for p in employees]
         return Success(data=data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -349,8 +396,8 @@ async def get_available_employees(
 async def get_visa_expiring_employees(days: Optional[int] = Query(90, description="警告日数", ge=1, le=365)):
     """ビザが期限切れになる従業員を取得"""
     try:
-        employees = await employee_controller.check_visa_expiring_soon(days=days)
-        data = await employee_controller.employees_to_dict(employees, include_relations=False)
+        employees = await personnel_controller.check_visa_expiring_soon(days=days)
+        data = [await p.to_dict() for p in employees]
         return Success(data=data, total=len(employees))
     except Exception as e:
         return Fail(msg=str(e))
@@ -360,11 +407,58 @@ async def get_visa_expiring_employees(days: Optional[int] = Query(90, descriptio
 async def get_employee_dashboard(employee_id: int = Query(..., description="従業員ID")):
     """従業員のダッシュボード統計情報を取得"""
     try:
-        employee = await employee_controller.get_employee_by_id(employee_id, include_relations=True)
+        from app.models.personnel import PersonnelSkill
+        from app.models.evaluation import PersonEvaluation
+        
+        employee = await personnel_controller.get_employee_by_id(employee_id)
         if not employee:
             return Fail(msg="従業員が見つかりません")
 
-        dashboard_stats = await employee_controller.get_employee_dashboard_stats(employee)
+        # スキル統計
+        skills_count = await PersonnelSkill.filter(personnel_id=employee_id).count()
+        primary_skills_count = await PersonnelSkill.filter(personnel_id=employee_id, is_primary_skill=True).count()
+        
+        # 評価統計 
+        evaluations = await PersonEvaluation.filter(personnel_id=employee_id).all()
+        total_evaluations = len(evaluations)
+        
+        evaluation_summary = {
+            "total_evaluations": total_evaluations,
+            "average_overall_rating": 0,
+            "average_technical_skill": 0,
+            "average_communication": 0,
+            "average_reliability": 0,
+            "recommendation_rate": 0,
+        }
+        
+        if evaluations:
+            evaluation_summary.update({
+                "average_overall_rating": round(sum(e.overall_rating for e in evaluations) / total_evaluations, 2),
+                "average_technical_skill": round(sum(e.technical_skill for e in evaluations) / total_evaluations, 2),
+                "average_communication": round(sum(e.communication for e in evaluations) / total_evaluations, 2),
+                "average_reliability": round(sum(e.reliability for e in evaluations) / total_evaluations, 2),
+                "recommendation_rate": round(sum(1 for e in evaluations if e.recommendation) / total_evaluations * 100, 1),
+            })
+        
+        dashboard_stats = {
+            "basic_info": {
+                "name": employee.name,
+                "code": employee.code,
+                "current_age": employee.current_age,
+                "employment_status": employee.employment_status,
+                "is_visa_expiring": employee.is_visa_expiring_soon(),
+            },
+            "skills_stats": {
+                "total_skills": skills_count,
+                "primary_skills": primary_skills_count,
+            },
+            "contract_stats": {
+                "total_contracts": 0,  # TODO: Contractモデル統一後に実装
+                "active_contracts": 0,
+            },
+            "evaluation_stats": evaluation_summary,
+        }
+        
         return Success(data=dashboard_stats)
     except Exception as e:
         return Fail(msg=str(e))

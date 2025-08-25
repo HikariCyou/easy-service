@@ -7,7 +7,7 @@ from app.models.enums import PersonType
 class PersonEvaluation(BaseModel, TimestampMixin):
     """
     統一人材評価記録（プロジェクト終了時の評価）
-    BPEmployee、Freelancer、Employee に対応
+    Personnel統一モデルに対応
     """
 
     # 評価対象の指定（polymorphic reference）
@@ -64,16 +64,8 @@ class PersonEvaluation(BaseModel, TimestampMixin):
 
     async def get_person_object(self):
         """評価対象の実際のオブジェクトを取得"""
-        if self.person_type == PersonType.BP_EMPLOYEE:
-            from app.models.bp import BPEmployee
-            return await BPEmployee.get_or_none(id=self.person_id)
-        elif self.person_type == PersonType.FREELANCER:
-            from app.models.freelancer import Freelancer
-            return await Freelancer.get_or_none(id=self.person_id)
-        elif self.person_type == PersonType.EMPLOYEE:
-            from app.models.employee import Employee
-            return await Employee.get_or_none(id=self.person_id)
-        return None
+        from app.models.personnel import Personnel
+        return await Personnel.get_or_none(id=self.person_id, person_type=self.person_type)
 
     async def get_person_name(self) -> str:
         """評価対象の実際の名前を取得"""

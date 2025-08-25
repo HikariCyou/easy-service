@@ -110,6 +110,9 @@ class ImportPersonDetailSchema(ImportPersonSchema):
     
     # 技能列表
     skills: List[Dict[str, Any]] = Field(default_factory=list, description="技能列表")
+    
+    # 特化信息
+    specialized_info: Optional[Dict[str, Any]] = Field(None, description="特化信息（根据人员类型不同）")
 
 
 class ImportPersonHistorySchema(BaseModel):

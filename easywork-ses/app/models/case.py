@@ -1,7 +1,7 @@
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import CandidateStatus, CaseStatus
+from app.models.enums import CandidateStatus, CaseStatus, ChangeType
 
 
 class Case(BaseModel, TimestampMixin):
@@ -44,16 +44,13 @@ class CaseCandidate(BaseModel, TimestampMixin):
 
     case = fields.ForeignKeyField("models.Case", related_name="candidates", description="案件")
 
-    # 三つの候補者タイプ（いずれか一つのみ設定）
-    bp_employee = fields.ForeignKeyField(
-        "models.BPEmployee", null=True, related_name="case_candidates", description="BP提供要員"
-    )
-    employee = fields.ForeignKeyField(
-        "models.Employee", null=True, related_name="case_candidates", description="自社社員"
-    )
-    freelancer = fields.ForeignKeyField(
-        "models.Freelancer", null=True, related_name="case_candidates", description="個人事業主"
-    )
+    # 統一Personnel使用（polymorphic reference）
+    personnel = fields.ForeignKeyField("models.Personnel", null=True, related_name="case_candidates", description="候補人材")
+    
+    # 下記フィールドは後方互換性のため保留（新統一システムではpersonnelを使用）
+    # bp_employee = fields.ForeignKeyField("models.BPEmployee", null=True, related_name="case_candidates", description="BP提供要員")
+    # employee = fields.ForeignKeyField("models.Employee", null=True, related_name="case_candidates", description="自社社員")
+    # freelancer = fields.ForeignKeyField("models.Freelancer", null=True, related_name="case_candidates", description="個人事業主")
 
     # プロセス管理
     recommend_date = fields.DateField(null=True, description="推薦日")
@@ -72,26 +69,56 @@ class CaseCandidate(BaseModel, TimestampMixin):
         table = "ses_case_candidate"
         table_description = "案件候補者（BP社員/自社社員/フリーランス）"
         # 一つの案件に対して同じ人は一度しか候補になれない制約
-        unique_together = [("case", "bp_employee"), ("case", "employee"), ("case", "freelancer")]
+        unique_together = [("case", "personnel")]
 
     @property
     def candidate_name(self) -> str:
         """候補者名を取得"""
-        if self.bp_employee:
-            return self.bp_employee.name
-        elif self.employee:
-            return self.employee.name
-        elif self.freelancer:
-            return self.freelancer.name
+        if self.personnel:
+            return self.personnel.name
         return "不明"
 
     @property
     def candidate_type(self) -> str:
         """候補者タイプを取得"""
-        if self.bp_employee:
-            return "BP社員"
-        elif self.employee:
-            return "自社社員"
-        elif self.freelancer:
-            return "フリーランス"
+        if self.personnel:
+            from app.models.enums import PersonType
+            type_mapping = {
+                PersonType.BP_EMPLOYEE: "BP社員",
+                PersonType.EMPLOYEE: "自社社員",
+                PersonType.FREELANCER: "フリーランス"
+            }
+            return type_mapping.get(self.personnel.person_type, "不明")
         return "不明"
+
+
+class CaseHistory(BaseModel, TimestampMixin):
+    """
+    案件変更履歴
+    """
+    
+    case = fields.ForeignKeyField("models.Case", related_name="history", description="案件")
+    change_type = fields.CharEnumField(ChangeType, description="変更タイプ")
+    
+    # 変更者情報
+    changed_by = fields.BigIntField(description="変更者ユーザーID")
+    changed_by_name = fields.CharField(max_length=100, null=True, description="変更者名")
+    
+    # 変更内容
+    field_name = fields.CharField(max_length=100, null=True, description="変更フィールド名")
+    old_value = fields.TextField(null=True, description="変更前の値")
+    new_value = fields.TextField(null=True, description="変更後の値")
+    
+    # 変更詳細（JSON形式で複数フィールドの変更を記録）
+    change_details = fields.JSONField(null=True, description="変更詳細（JSON）")
+    
+    # 変更理由・コメント
+    comment = fields.TextField(null=True, description="変更理由・コメント")
+    
+    # IP アドレス（監査用）
+    ip_address = fields.CharField(max_length=45, null=True, description="変更者IPアドレス")
+    
+    class Meta:
+        table = "ses_case_history"
+        table_description = "案件変更履歴"
+        ordering = ["-created_at"]

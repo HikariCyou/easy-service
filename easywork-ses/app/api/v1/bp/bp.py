@@ -2,7 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.controllers.bp import bp_controller
+from app.controllers.bp_company import bp_company_controller as bp_controller
 from app.schemas import Fail, Success
 from app.schemas.bp import AddBPCompanySchema, UpdateBPCompanySchema
 

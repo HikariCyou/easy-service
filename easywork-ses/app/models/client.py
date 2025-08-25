@@ -1,6 +1,7 @@
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
+from app.models.enums import DecimalProcessingType
 
 
 class ClientCompany(BaseModel, TimestampMixin):
@@ -24,6 +25,13 @@ class ClientCompany(BaseModel, TimestampMixin):
     phone = fields.CharField(max_length=50, null=True, description="電話番号")
     email = fields.CharField(max_length=100, null=True, description="メール")
     website = fields.CharField(max_length=255, null=True, description="Webサイト")
+    
+    # 出勤計算関連
+    attendance_calc_type = fields.IntField(default=15, null=True, description="出勤計算区分（分単位）")
+    decimal_processing_type = fields.CharEnumField(
+        DecimalProcessingType, default=DecimalProcessingType.ROUND, null=True, description="小数処理区分"
+    )
+    
     remark = fields.TextField(null=True, description="備考")
 
     cases: fields.ReverseRelation["Case"]
