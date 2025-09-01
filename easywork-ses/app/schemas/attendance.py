@@ -320,7 +320,7 @@ class WeeklyMoodSchema(BaseModel):
 
 class SetWeeklyMoodSchema(BaseModel):
     """週間心情設定Schema"""
-    
+    week_number: Optional[int] = Field(None, ge=1, le=53, description="週番号（1-53）")
     mood_status: str = Field(..., description="心情状態（excellent/good/normal/stressed/tired/difficult）")
     comment: Optional[str] = Field(None, max_length=500, description="心情コメント（500文字以内）")
 
@@ -423,7 +423,7 @@ class MonthlyAttendanceStatusSchema(BaseModel):
 class SubmitMonthlyAttendanceSchema(BaseModel):
     """月次考勤提交Schema"""
     
-    year_month: str = Field(..., description="対象年月（YYYY-MM）", pattern="^\\d{4}-\\d{2}$")
+    year_month: str = Field(..., description="対象年月（YYYY-MM）")
     remark: Optional[str] = Field(None, max_length=1000, description="提交備考（1000文字以内）")
 
 

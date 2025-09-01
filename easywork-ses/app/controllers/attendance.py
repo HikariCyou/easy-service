@@ -6,12 +6,12 @@ from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
 from app.core.ctx import CTX_USER_ID
-from app.models.attendance import DailyAttendance, MonthlyAttendance, WeeklyMood
+from app.models.attendance import DailyAttendance, MonthlyAttendance, WeeklyMood, MonthlyAttendanceLog
 from app.models.contract import Contract
 from app.models.personnel import Personnel
 from app.models.case import Case
 from app.models.client import ClientCompany
-from app.models.enums import AttendanceType, ApproveStatus, WeeklyMoodStatus, MonthlySubmissionStatus
+from app.models.enums import AttendanceType, ApproveStatus, WeeklyMoodStatus
 from app.schemas.attendance import (
     DailyAttendanceSchema,
     CreateDailyAttendanceSchema, 
@@ -36,6 +36,7 @@ class AttendanceController:
         personnel = await Personnel.get_or_none(user_id=user_id)
         if not personnel:
             raise Exception("指定されたユーザーの要員情報が見つかりません")
+
 
         current_contract = await Contract.filter(
             personnel=personnel,
@@ -107,11 +108,12 @@ class AttendanceController:
             query &= Q(work_date__lte=search_params['end_date'])
         if search_params.get('attendance_type'):
             query &= Q(attendance_type=search_params['attendance_type'])
-        if search_params.get('is_approved') is not None:
-            if search_params['is_approved']:
-                query &= Q(approved_status=ApproveStatus.APPROVED)
-            else:
-                query &= Q(approved_status__in=[ApproveStatus.PENDING, ApproveStatus.REJECT, ApproveStatus.WITHDRAWN])
+        # 日次考勤不再有审批状态，审批在月次层面进行
+        # if search_params.get('is_approved') is not None:
+        #     if search_params['is_approved']:
+        #         query &= Q(approved_status=ApproveStatus.APPROVED)
+        #     else:
+        #         query &= Q(approved_status__in=[ApproveStatus.PENDING, ApproveStatus.REJECT, ApproveStatus.WITHDRAWN])
 
         # 総数取得
         total = await DailyAttendance.filter(query).count()
@@ -130,7 +132,9 @@ class AttendanceController:
             attendance_dict['weekday_name'] = attendance.weekday_name_jp
             attendance_dict['is_weekend'] = attendance.is_weekend
             attendance_dict['total_break_minutes'] = attendance.total_break_minutes
-            attendance_dict['is_approved'] = attendance.approved_status == ApproveStatus.APPROVED
+            # 日次考勤不再有审批状态
+            # attendance_dict['is_approved'] = attendance.approved_status == ApproveStatus.APPROVED
+            attendance_dict['is_approved'] = False  # 审批在月次层面处理
             
             if attendance.contract:
                 attendance_dict['contract'] = await attendance.contract.to_dict()
@@ -547,8 +551,6 @@ class AttendanceController:
             
             if record.actual_working_hours:
                 total_working_hours += float(record.actual_working_hours)
-            if record.approved_status == ApproveStatus.APPROVED:
-                approved_count += 1
 
         # 契約情報を整形
         contracts_data = []
@@ -565,8 +567,6 @@ class AttendanceController:
         summary = {
             "total_working_hours": total_working_hours,
             "total_days": len(attendance_records),
-            "approved_days": approved_count,
-            "pending_approval_days": len(attendance_records) - approved_count,
         }
 
         return {
@@ -732,9 +732,9 @@ class AttendanceController:
 
     # === 心情管理相关方法 ===
     
-    async def set_weekly_mood(self, user_id: int, mood_status: WeeklyMoodStatus, comment: str = None) -> WeeklyMood:
+    async def set_weekly_mood(self, user_id: int, mood_status: WeeklyMoodStatus, week_number:int = None,comment: str = None) -> WeeklyMood:
         """设置当前周的心情状态"""
-        return await WeeklyMood.set_weekly_mood(user_id, mood_status, comment)
+        return await WeeklyMood.set_weekly_mood(user_id, mood_status, week_number, comment)
     
     async def get_current_week_mood(self, user_id: int) -> Optional[WeeklyMood]:
         """获取当前周的心情状态"""
@@ -926,6 +926,9 @@ class AttendanceController:
     
     async def get_or_create_monthly_attendance(self, user_id: int, year_month: str, contract_id: int = None) -> MonthlyAttendance:
         """获取或创建月度考勤记录"""
+        # 确保year_month是字符串格式
+        year_month_str = str(year_month) if year_month else ""
+        
         # 获取用户的当前合同
         if not contract_id:
             personnel = await Personnel.get_or_none(user_id=user_id)
@@ -939,63 +942,229 @@ class AttendanceController:
         
         monthly, created = await MonthlyAttendance.get_or_create(
             user_id=user_id,
-            year_month=year_month,
+            year_month=year_month_str,
             defaults={
                 "contract_id": contract_id,
-                "submission_status": MonthlySubmissionStatus.DRAFT
+                "status": ApproveStatus.DRAFT
             }
         )
         
         return monthly
     
-    async def submit_monthly_attendance(self, user_id: int, year_month: str) -> MonthlyAttendance:
-        """提交月度考勤"""
-        monthly = await MonthlyAttendance.get_or_none(
+    async def _log_monthly_operation(self, monthly_id: int, operation: str, operator_id: int, 
+                                   from_status: str = None, to_status: str = None, remark: str = None):
+        """记录月次考勤操作日志"""
+        await MonthlyAttendanceLog.create(
+            monthly_id=monthly_id,
+            operation=operation,
+            operator_id=operator_id,
+            from_status=from_status,
+            to_status=to_status,
+            remark=remark
+        )
+    
+    async def submit_monthly_attendance(self, user_id: int, year_month: str, remark: str = None) -> MonthlyAttendance:
+        """智能提交月次考勤（根据状态处理）"""
+        monthly, created = await MonthlyAttendance.get_or_create(
             user_id=user_id,
-            year_month=year_month
+            year_month=str(year_month),
+            defaults={"status": ApproveStatus.DRAFT}
         )
         
-        if not monthly:
-            raise Exception("月度考勤记录不存在，请先创建")
+        original_status = monthly.status
         
-        await monthly.submit(submitted_by=user_id)
+        # 检查是否可以提交/重新提交
+        if monthly.status == ApproveStatus.APPROVED:
+            raise ValueError("已批准的考勤记录不能修改")
+        
+        # 根据当前状态处理
+        if monthly.status in [ApproveStatus.DRAFT, ApproveStatus.REJECTED, ApproveStatus.WITHDRAWN]:
+            # 可以提交或重新提交
+            monthly.status = ApproveStatus.PENDING
+            monthly.submitted_at = datetime.now()
+            if remark:
+                monthly.submit_remark = remark
+            
+            # 记录操作日志
+            await self._log_monthly_operation(
+                monthly_id=monthly.id,
+                operation="submit" if original_status == ApproveStatus.DRAFT else "resubmit",
+                operator_id=user_id,
+                from_status=original_status,
+                to_status=ApproveStatus.PENDING,
+                remark=remark
+            )
+        elif monthly.status == ApproveStatus.PENDING:
+            # 已在审批中，更新备注即可
+            if remark:
+                monthly.submit_remark = remark
+                # 记录备注更新日志
+                await self._log_monthly_operation(
+                    monthly_id=monthly.id,
+                    operation="update_remark",
+                    operator_id=user_id,
+                    from_status=original_status,
+                    to_status=monthly.status,
+                    remark=remark
+                )
+        
+        await monthly.save()
         return monthly
     
-    async def withdraw_monthly_attendance(self, user_id: int, year_month: str) -> MonthlyAttendance:
-        """撤回月度考勤提交"""
-        monthly = await MonthlyAttendance.get_or_none(
-            user_id=user_id,
-            year_month=year_month
-        )
-        
-        if not monthly:
-            raise Exception("月度考勤记录不存在")
-        
-        await monthly.withdraw()
-        return monthly
-    
-    async def approve_monthly_attendance(self, user_id: int, year_month: str, approved_by: int) -> MonthlyAttendance:
-        """批准月度考勤（管理者操作）"""
-        monthly = await MonthlyAttendance.get_or_none(
-            user_id=user_id,
-            year_month=year_month
-        )
-        
-        if not monthly:
-            raise Exception("月度考勤记录不存在")
-        
-        await monthly.approve(approved_by=approved_by)
-        return monthly
-    
-    async def get_monthly_attendance_status(self, user_id: int, year_month: str) -> Optional[Dict[str, Any]]:
-        """获取月度考勤状态和统计"""
-        monthly = await MonthlyAttendance.get_or_none(
-            user_id=user_id,
-            year_month=year_month
-        )
-        
+    async def get_monthly_attendance_detail(self, monthly_id: int) -> Dict[str, Any]:
+        """获取月次考勤详细数据（包含用户信息和日次记录）"""
+        # 获取月度考勤记录
+        monthly = await MonthlyAttendance.get_or_none(id=monthly_id)
         if not monthly:
             return None
+        
+        # 获取提交用户的要员信息
+        personnel = await Personnel.get_or_none(user_id=monthly.user_id)
+        user_info = None
+        if personnel:
+            user_info = await personnel.to_dict()
+        
+        # 获取该月的日次考勤记录
+        year_month_str = str(monthly.year_month)
+        if "-" not in year_month_str:
+            raise ValueError(f"Invalid year_month format: {monthly.year_month}")
+        year, month = map(int, year_month_str.split("-"))
+        
+        # 计算该月的开始和结束日期
+        from calendar import monthrange
+        start_date = date(year, month, 1)
+        end_date = date(year, month, monthrange(year, month)[1])
+        
+        daily_records = await DailyAttendance.filter(
+            user_id=monthly.user_id,
+            work_date__gte=start_date,
+            work_date__lte=end_date
+        ).prefetch_related('contract').order_by('work_date').all()
+        
+        # 计算汇总统计
+        total_working_hours = 0.0
+        working_days = 0
+        paid_leave_days = 0
+        absence_days = 0
+        
+        daily_list = []
+        for record in daily_records:
+            # 缓存合同信息用于加班时间计算
+            if hasattr(record, 'contract'):
+                record._contract_cached = record.contract
+                
+            hours = record.actual_working_hours or 0.0
+            total_working_hours += float(hours)
+            
+            if record.attendance_type == AttendanceType.NORMAL:
+                working_days += 1
+            elif record.attendance_type == AttendanceType.PAID_LEAVE:
+                paid_leave_days += 1
+            elif record.attendance_type == AttendanceType.ABSENCE:
+                absence_days += 1
+            
+            # 直接使用to_dict，不要手动转换
+            daily_list.append(await record.to_dict())
+        
+        # 组装返回数据
+        result = {
+            "monthly_info": await monthly.to_dict(),
+            "user_info": user_info,
+            "daily_records": daily_list,
+            "summary": {
+                "total_working_hours": round(total_working_hours, 2),
+                "working_days": working_days,
+                "paid_leave_days": paid_leave_days,
+                "absence_days": absence_days,
+                "total_days": len(daily_records)
+            }
+        }
+        
+        return result
+    
+    async def withdraw_monthly_attendance(self, monthly_id: int, user_id: int) -> MonthlyAttendance:
+        """撤回月度考勤提交（简化参数）"""
+        monthly = await MonthlyAttendance.get_or_none(id=monthly_id)
+        
+        if not monthly:
+            raise Exception("月度考勤记录不存在")
+        
+        # 权限检查：只能撤回自己的记录
+        if monthly.user_id != user_id:
+            raise Exception("只能撤回自己的考勤记录")
+        
+        original_status = monthly.status
+        await monthly.withdraw()
+        
+        # 记录操作日志
+        await self._log_monthly_operation(
+            monthly_id=monthly_id,
+            operation="withdraw",
+            operator_id=user_id,
+            from_status=original_status,
+            to_status=ApproveStatus.WITHDRAWN,
+            remark="用户主动撤回"
+        )
+        
+        return monthly
+    
+    async def approve_monthly_attendance(self, monthly_id: int, approved_by: int, remark: str = None) -> MonthlyAttendance:
+        """批准月度考勤（管理者操作）"""
+        monthly = await MonthlyAttendance.get_or_none(id=monthly_id)
+        
+        if not monthly:
+            raise Exception("月度考勤记录不存在")
+        
+        original_status = monthly.status
+        await monthly.approve(approved_by=approved_by, approve_remark=remark)
+        
+        # 记录操作日志
+        await self._log_monthly_operation(
+            monthly_id=monthly_id,
+            operation="approve",
+            operator_id=approved_by,
+            from_status=original_status,
+            to_status=ApproveStatus.APPROVED,
+            remark=remark
+        )
+        
+        return monthly
+    
+    async def reject_monthly_attendance(self, monthly_id: int, approved_by: int, remark: str = None) -> MonthlyAttendance:
+        """拒绝月度考勤（管理者操作）"""
+        monthly = await MonthlyAttendance.get_or_none(id=monthly_id)
+        
+        if not monthly:
+            raise Exception("月度考勤记录不存在")
+        
+        original_status = monthly.status
+        await monthly.reject(approved_by=approved_by, approve_remark=remark)
+        
+        # 记录操作日志
+        await self._log_monthly_operation(
+            monthly_id=monthly_id,
+            operation="reject",
+            operator_id=approved_by,
+            from_status=original_status,
+            to_status=ApproveStatus.REJECTED,
+            remark=remark
+        )
+        
+        return monthly
+    
+    async def get_monthly_attendance_status(self, user_id: int, year_month: str) -> Dict[str, Any]:
+        """获取月度考勤状态和统计（自动创建记录）"""
+        # 确保year_month是字符串格式
+        year_month_str = str(year_month) if year_month else ""
+        
+        # 获取或创建月度记录
+        monthly, created = await MonthlyAttendance.get_or_create(
+            user_id=user_id,
+            year_month=year_month_str,
+            defaults={
+                "status": ApproveStatus.DRAFT
+            }
+        )
         
         monthly_dict = await monthly.to_dict()
         
@@ -1013,9 +1182,9 @@ class AttendanceController:
         
         monthly_dict.update({
             "statistics": stats,
-            "can_edit": monthly.submission_status in [MonthlySubmissionStatus.DRAFT, MonthlySubmissionStatus.WITHDRAWN],
-            "can_submit": monthly.submission_status in [MonthlySubmissionStatus.DRAFT, MonthlySubmissionStatus.WITHDRAWN],
-            "can_withdraw": monthly.submission_status == MonthlySubmissionStatus.SUBMITTED
+            "can_edit": monthly.status in [ApproveStatus.DRAFT, ApproveStatus.WITHDRAWN, ApproveStatus.REJECTED],
+            "can_submit": monthly.status in [ApproveStatus.DRAFT, ApproveStatus.WITHDRAWN, ApproveStatus.REJECTED],
+            "can_withdraw": monthly.status == ApproveStatus.PENDING
         })
         
         return monthly_dict

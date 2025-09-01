@@ -1,11 +1,13 @@
 from datetime import date, datetime, timezone
-from typing import Optional, List
-from fastapi import APIRouter, Query, Body, HTTPException
+from typing import Optional, List, Union
+from fastapi import APIRouter, Query, Body, HTTPException, Header, BackgroundTasks
 
 from app.controllers.attendance import attendance_controller
 from app.controllers.import_person import import_person_controller
 from app.core.ctx import CTX_USER_ID
+from app.core.process_client import process_client
 from app.schemas import Success, Fail
+import json
 from app.schemas.attendance import (
     DailyAttendanceSchema,
     CreateDailyAttendanceSchema,
@@ -23,6 +25,27 @@ from app.schemas.attendance import (
 )
 
 router = APIRouter()
+
+
+# 月次考勤审批流程key
+MONTHLY_ATTENDANCE_PROCESS_KEY = "TOB_KQ"
+
+
+async def start_approval_process(monthly_id: int, authorization: str):
+    """后台启动审批流程"""
+    try:
+        result = await process_client.run_process(
+            process_key=MONTHLY_ATTENDANCE_PROCESS_KEY,
+            business_key=str(monthly_id),
+            variables=json.dumps({"showSign": False}),
+            token=authorization
+        )
+        if result:
+            print(f"月次考勤审批流程启动成功: monthly_id={monthly_id}")
+        else:
+            print(f"月次考勤审批流程启动失败: monthly_id={monthly_id}")
+    except Exception as e:
+        print(f"月次考勤审批流程启动异常: monthly_id={monthly_id}, error={str(e)}")
 
 
 @router.post("/daily", summary="日次出勤記録作成")
@@ -51,7 +74,7 @@ async def get_daily_attendance_list(
     start_date: Optional[date] = Query(None, description="検索開始日"),
     end_date: Optional[date] = Query(None, description="検索終了日"),
     attendance_type: Optional[str] = Query(None, description="出勤区分"),
-    is_approved: Optional[bool] = Query(None, description="承認状態")
+    # is_approved: Optional[bool] = Query(None, description="承認状態")  # 日次考勤不再有审批状态
 ):
     """
     日次出勤記録の一覧を取得
@@ -74,8 +97,8 @@ async def get_daily_attendance_list(
             search_params["end_date"] = end_date
         if attendance_type:
             search_params["attendance_type"] = attendance_type
-        if is_approved is not None:
-            search_params["is_approved"] = is_approved
+        # if is_approved is not None:
+        #     search_params["is_approved"] = is_approved  # 日次考勤不再有审批状态
 
         result = await attendance_controller.get_daily_attendance_list(
             page=page,
@@ -202,40 +225,10 @@ async def get_monthly_attendance_list(
         return Fail(msg=str(e))
 
 
-@router.post("/monthly/calculate", summary="月次出勤集計計算")
-async def calculate_monthly_attendance(
-    contract_id: int = Body(..., description="契約ID"),
-    year_month: str = Body(..., description="対象年月（YYYY-MM）")
-):
-    """
-    指定契約・年月の月次出勤集計を計算
-    
-    日次出勤記録から自動集計し、支払額も計算
-    """
-    try:
-        monthly = await attendance_controller.calculate_monthly_attendance(contract_id, year_month)
-        result = await monthly.to_dict()
-        return Success(data=result)
-    except Exception as e:
-        return Fail(msg=str(e))
+# 移除单独的calculate端点，计算功能已合并到submit流程中自动处理
 
 
-@router.put("/monthly/{monthly_id}/confirm", summary="月次出勤集計確定")
-async def confirm_monthly_attendance(
-    monthly_id: int,
-    confirmed_by: int = Body(..., description="確定者ID")
-):
-    """
-    月次出勤集計を確定
-    
-    確定後は変更不可となり、支払処理に使用可能
-    """
-    try:
-        monthly = await attendance_controller.confirm_monthly_attendance(monthly_id, confirmed_by)
-        result = await monthly.to_dict()
-        return Success(data=result)
-    except Exception as e:
-        return Fail(msg=str(e))
+# 移除原来的confirm端点，功能已合并到submit中
 
 
 @router.get("/calendar", summary="出勤カレンダー取得")
@@ -419,7 +412,7 @@ async def get_attendance_dashboard(
         pending_approvals = await attendance_controller.get_daily_attendance_list(
             page=1, 
             page_size=1,
-            search_params={"user_id": user_id, "contract_id": contract_id, "is_approved": False}
+            search_params={"user_id": user_id, "contract_id": contract_id}  # 移除is_approved筛选
         )
         
         dashboard_data = {
@@ -523,9 +516,10 @@ async def set_weekly_mood(data: SetWeeklyMoodSchema):
         mood = await attendance_controller.set_weekly_mood(
             user_id=user_id,
             mood_status=data.mood_status,
+            week_number=data.week_number,
             comment=data.comment
         )
-        return Success(data=mood)
+        return Success(data=await mood.to_dict())
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -546,7 +540,7 @@ async def get_current_week_mood():
             return Fail(msg="ユーザー情報が取得できません")
             
         mood = await attendance_controller.get_current_week_mood(user_id=user_id)
-        return Success(data=mood)
+        return Success(data= await mood.to_dict() if mood else None)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -670,14 +664,18 @@ async def get_team_mood_summary(
 # =======================================
 
 @router.post("/monthly/submit", summary="月次考勤提交")
-async def submit_monthly_attendance(data: SubmitMonthlyAttendanceSchema):
+async def submit_monthly_attendance(
+    data: SubmitMonthlyAttendanceSchema,
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(..., description="token验证")
+):
     """
     月次考勤を提交
     
     機能:
     - 指定月の日次考勤記録を集計して提交
     - 提交時に統計データの快照を作成
-    - 提交後は日次記録の修正が制限される
+    - 提交後は日次記録の修正が制限される1
     
     提交条件:
     - 対象月の日次記録が存在する
@@ -692,12 +690,40 @@ async def submit_monthly_attendance(data: SubmitMonthlyAttendanceSchema):
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
             
-        result = await attendance_controller.submit_monthly_attendance(
+        monthly = await attendance_controller.submit_monthly_attendance(
             user_id=user_id,
             year_month=data.year_month,
             remark=data.remark
         )
-        return Success(data=result)
+        
+        # 添加后台任务启动审批流程
+        background_tasks.add_task(start_approval_process, monthly.id, authorization)
+        
+        result = await monthly.to_dict()
+        return Success(data=result, msg="月次考勤提交成功，審査プロセスを開始中")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/monthly/detail/{monthly_id}", summary="月次考勤詳細取得")
+async def get_monthly_attendance(monthly_id: int):
+    """
+    月次考勤の詳細データを取得
+    
+    機能:
+    - MonthlyAttendance基本情報
+    - 提出ユーザーの要員情報
+    - 該当月の日次考勤記録一覧
+    - 統計汇総データ
+    
+    Args:
+        monthly_id: 月次考勤記録ID
+    """
+    try:
+        monthly = await attendance_controller.get_monthly_attendance_detail(monthly_id)
+        if not monthly:
+            return Fail(msg="月次考勤記録が見つかりません")
+        return Success(data=monthly)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -725,10 +751,11 @@ async def withdraw_monthly_attendance(monthly_id: int):
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
             
-        result = await attendance_controller.withdraw_monthly_attendance(
+        monthly = await attendance_controller.withdraw_monthly_attendance(
             monthly_id=monthly_id,
             user_id=user_id
         )
+        result = await monthly.to_dict()
         return Success(data=result)
     except Exception as e:
         return Fail(msg=str(e))
@@ -761,11 +788,49 @@ async def approve_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
         # if not await check_manager_permission(user_id):
         #     return Fail(msg="管理者権限が必要です")
             
-        result = await attendance_controller.approve_monthly_attendance(
+        monthly = await attendance_controller.approve_monthly_attendance(
             monthly_id=data.monthly_attendance_id,
             approved_by=user_id,
             remark=data.remark
         )
+        result = await monthly.to_dict()
+        return Success(data=result)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/monthly/reject", summary="月次考勤拒绝（管理者用）")
+async def reject_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
+    """
+    月次考勤を拒绝（管理者機能）
+    
+    機能:
+    - 提交済みの月次考勤を拒绝
+    - 拒绝后状态回到draft，可以重新提交
+    - 拒绝者情報と拒绝日時を記録
+    
+    拒绝條件:
+    - pending状态である
+    - 管理者権限を持つ
+    
+    Args:
+        data: 拒绝データ（月次考勤ID、備考）
+    """
+    try:
+        user_id = CTX_USER_ID.get()
+        if not user_id:
+            return Fail(msg="ユーザー情報が取得できません")
+            
+        # 管理者権限チェック（将来的に実装）
+        # if not await check_manager_permission(user_id):
+        #     return Fail(msg="管理者権限が必要です")
+            
+        monthly = await attendance_controller.reject_monthly_attendance(
+            monthly_id=data.monthly_attendance_id,
+            approved_by=user_id,
+            remark=data.remark
+        )
+        result = await monthly.to_dict()
         return Success(data=result)
     except Exception as e:
         return Fail(msg=str(e))
@@ -773,7 +838,7 @@ async def approve_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
 
 @router.get("/monthly/status", summary="月次考勤状态取得")
 async def get_monthly_attendance_status(
-    year_month: str = Query(..., description="対象年月（YYYY-MM）", pattern="^\\d{4}-\\d{2}$"),
+    year_month: str = Query(None, description="対象年月（YYYY-MM）"),
     user_id: Optional[int] = Query(None, description="ユーザーID（管理者用、未指定時は自分）")
 ):
     """

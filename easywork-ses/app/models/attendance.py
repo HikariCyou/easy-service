@@ -1,11 +1,11 @@
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
 from app.models.contract import Contract
-from app.models.enums import AttendanceType, ApproveStatus, DecimalProcessingType, WeeklyMoodStatus, MonthlySubmissionStatus
+from app.models.enums import AttendanceType, ApproveStatus, DecimalProcessingType, WeeklyMoodStatus
 
 
 class DailyAttendance(BaseModel, TimestampMixin):
@@ -31,10 +31,10 @@ class DailyAttendance(BaseModel, TimestampMixin):
     # 出勤区分
     attendance_type = fields.CharEnumField(AttendanceType, default=AttendanceType.NORMAL, description="出勤区分")
 
-    # 承認状況
-    approved_status = fields.CharEnumField(ApproveStatus,default=ApproveStatus.PENDING, description="承認status")
-    approved_at = fields.DatetimeField(null=True, description="承認日時")
-    approved_by = fields.BigIntField(null=True, description="承認者ID")
+    # 日次考勤记录不需要审批状态，审批在月次层面进行
+    # approved_status 已移至 MonthlyAttendance
+    # approved_at = fields.DatetimeField(null=True, description="承認日時")
+    # approved_by = fields.BigIntField(null=True, description="承認者ID")
 
     # 備考
     remark = fields.TextField(null=True, description="備考（遅刻・早退理由等）")
@@ -95,6 +95,37 @@ class DailyAttendance(BaseModel, TimestampMixin):
     def actual_working_hours(self) -> float:
         """実働時間を計算（同期版）"""
         return self.calculate_working_hours_sync()
+    
+    @property
+    def overtime_hours(self) -> float:
+        """加班时间（基于合同free_overtime_hours计算）"""
+        if not hasattr(self, '_contract_cached') or not self._contract_cached:
+            return 0.0
+        
+        # 获取合同的免费加班时间
+        free_overtime = getattr(self._contract_cached, 'free_overtime_hours', 0.0) or 0.0
+        actual_hours = self.actual_working_hours
+        
+        # 只有超过免费加班时间的部分才算真正的加班
+        if actual_hours > free_overtime:
+            return round(actual_hours - free_overtime, 1)
+        return 0.0
+    
+    async def get_overtime_hours(self) -> float:
+        """异步获取加班时间（确保合同数据已加载）"""
+        if not self.contract:
+            return 0.0
+        
+        # 缓存合同信息以供同步属性使用
+        self._contract_cached = self.contract
+        
+        free_overtime = getattr(self.contract, 'free_overtime_hours', 0.0) or 0.0
+        actual_hours = await self.calculate_working_hours()
+        
+        # 只有超过免费加班时间的部分才算真正的加班
+        if actual_hours > free_overtime:
+            return round(actual_hours - free_overtime, 1)
+        return 0.0
     
     async def calculate_working_hours(self) -> float:
         """実働時間を計算（客户的小数処理設定を適用）"""
@@ -169,8 +200,8 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
     year_month = fields.CharField(max_length=7, description="対象年月（YYYY-MM）")
     
     # 提交审批流程管理（这是MonthlyAttendance存在的主要价值）
-    submission_status = fields.CharEnumField(
-        MonthlySubmissionStatus, default=MonthlySubmissionStatus.DRAFT, description="提交状态"
+    status = fields.CharEnumField(
+        ApproveStatus, default=ApproveStatus.DRAFT, description="审批状态"
     )
     submitted_at = fields.DatetimeField(null=True, description="提交日時")
     approved_at = fields.DatetimeField(null=True, description="承認日時")
@@ -190,18 +221,35 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
 
     async def get_daily_records(self):
         """获取当月的日次记录"""
-        year, month = map(int, self.year_month.split("-"))
-        return await DailyAttendance.filter(
+        year_month_str = str(self.year_month)
+        year, month = map(int, year_month_str.split("-"))
+        from calendar import monthrange
+        start_date = date(year, month, 1)
+        end_date = date(year, month, monthrange(year, month)[1])
+
+        records = await DailyAttendance.filter(
             user_id=self.user_id,
-            work_date__year=year,
-            work_date__month=month
-        ).all()
+            work_date__gte=start_date,
+            work_date__lte=end_date
+        ).prefetch_related('contract').all()
+        
+        # 为每条记录缓存合同信息，支持overtime_hours计算
+        for record in records:
+            if hasattr(record, 'contract'):
+                record._contract_cached = record.contract
+        
+        return records
 
     @property
     async def total_working_hours(self) -> float:
-        """総実働時間（计算属性）"""
+        """総実働時间（计算属性）"""
         daily_records = await self.get_daily_records()
-        return sum(record.actual_working_hours for record in daily_records)
+        total = 0.0
+        for record in daily_records:
+            hours = record.actual_working_hours
+            if hours is not None:
+                total += float(hours)
+        return round(total, 2)
 
     @property
     async def working_days(self) -> int:
@@ -233,8 +281,15 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
         """计算统计数据并保存快照（提交时调用）"""
         daily_records = await self.get_daily_records()
         
+        # 安全的时间汇总，处理None值和类型转换
+        total_working_hours = 0.0
+        for record in daily_records:
+            hours = record.actual_working_hours
+            if hours is not None:
+                total_working_hours += float(hours)
+        
         snapshot = {
-            "total_working_hours": sum(record.actual_working_hours for record in daily_records),
+            "total_working_hours": round(total_working_hours, 2),
             "working_days": len([r for r in daily_records if r.attendance_type == AttendanceType.NORMAL]),
             "paid_leave_days": len([r for r in daily_records if r.attendance_type == AttendanceType.PAID_LEAVE]),
             "absence_days": len([r for r in daily_records if r.attendance_type == AttendanceType.ABSENCE]),
@@ -247,32 +302,32 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
 
     async def submit(self, submit_remark: str = None):
         """提交月度考勤审批"""
-        if self.submission_status in [MonthlySubmissionStatus.SUBMITTED, MonthlySubmissionStatus.APPROVED]:
+        if self.status in [ApproveStatus.PENDING, ApproveStatus.APPROVED]:
             raise ValueError("已提交或已批准的记录无法重复提交")
         
         # 计算并保存快照（这是MonthlyAttendance的核心价值）
         await self.calculate_and_save_snapshot()
         
-        self.submission_status = MonthlySubmissionStatus.SUBMITTED
+        self.status = ApproveStatus.PENDING
         self.submitted_at = datetime.now()
         self.submit_remark = submit_remark
         await self.save()
 
     async def withdraw(self):
         """撤回提交（恢复到可编辑状态）"""
-        if self.submission_status != MonthlySubmissionStatus.SUBMITTED:
-            raise ValueError("只有已提交状态的记录才能撤回")
+        if self.status != ApproveStatus.PENDING:
+            raise ValueError("只有等待审批状态的记录才能撤回")
         
-        self.submission_status = MonthlySubmissionStatus.WITHDRAWN
+        self.status = ApproveStatus.WITHDRAWN
         self.snapshot_data = None  # 清除快照，重新基于实时数据
         await self.save()
 
     async def approve(self, approved_by: int, approve_remark: str = None):
         """管理者批准月度考勤"""
-        if self.submission_status != MonthlySubmissionStatus.SUBMITTED:
-            raise ValueError("只有已提交状态的记录才能批准")
+        if self.status != ApproveStatus.PENDING:
+            raise ValueError("只有等待审批状态的记录才能批准")
         
-        self.submission_status = MonthlySubmissionStatus.APPROVED
+        self.status = ApproveStatus.APPROVED
         self.approved_at = datetime.now()
         self.approved_by = approved_by
         self.approve_remark = approve_remark
@@ -280,10 +335,10 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
     
     async def reject(self, approved_by: int, approve_remark: str = None):
         """管理者拒绝月度考勤"""
-        if self.submission_status != MonthlySubmissionStatus.SUBMITTED:
-            raise ValueError("只有已提交状态的记录才能拒绝")
+        if self.status != ApproveStatus.PENDING:
+            raise ValueError("只有等待审批状态的记录才能拒绝")
         
-        self.submission_status = MonthlySubmissionStatus.REJECTED
+        self.status = ApproveStatus.REJECTED
         self.approved_at = datetime.now()
         self.approved_by = approved_by
         self.approve_remark = approve_remark
@@ -293,15 +348,15 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
     @property 
     def can_edit_daily_records(self) -> bool:
         """判断是否可以编辑日次记录"""
-        return self.submission_status in [
-            MonthlySubmissionStatus.DRAFT, 
-            MonthlySubmissionStatus.WITHDRAWN,
-            MonthlySubmissionStatus.REJECTED
+        return self.status in [
+            ApproveStatus.DRAFT, 
+            ApproveStatus.WITHDRAWN,
+            ApproveStatus.REJECTED
         ]
     
     def get_display_data(self):
         """获取用于显示的数据（优先使用快照）"""
-        if self.snapshot_data and self.submission_status == MonthlySubmissionStatus.APPROVED:
+        if self.snapshot_data and self.status == ApproveStatus.APPROVED:
             return self.snapshot_data
         # 对于未审批的记录，返回None，让调用方实时计算
         return None
@@ -313,7 +368,7 @@ class MonthlyAttendance(BaseModel, TimestampMixin):
             user_id=user_id,
             year_month=year_month,
             defaults={
-                "submission_status": MonthlySubmissionStatus.DRAFT
+                "status": ApproveStatus.DRAFT
             }
         )
         return record, created
@@ -403,12 +458,12 @@ class WeeklyMood(BaseModel, TimestampMixin):
         )
 
     @classmethod
-    async def set_weekly_mood(cls, user_id: int, mood_status: WeeklyMoodStatus, comment: str = None):
+    async def set_weekly_mood(cls, user_id: int, mood_status: WeeklyMoodStatus,week_number:int=None, comment: str = None):
         """设置当前周的心情"""
         from datetime import datetime
         today = datetime.now().date()
         year = today.year
-        week_number = today.isocalendar()[1]
+        week_number = week_number if week_number else today.isocalendar()[1]
         
         mood, created = await cls.get_or_create(
             user_id=user_id,
@@ -416,6 +471,7 @@ class WeeklyMood(BaseModel, TimestampMixin):
             week_number=week_number,
             defaults={
                 "mood_status": mood_status,
+                "week_number": week_number,
                 "comment": comment
             }
         )
@@ -423,6 +479,7 @@ class WeeklyMood(BaseModel, TimestampMixin):
         if not created:
             mood.mood_status = mood_status
             mood.comment = comment
+            mood.week_number = week_number
             await mood.save()
         
         return mood
@@ -550,3 +607,19 @@ class WeeklyMood(BaseModel, TimestampMixin):
             "trend_analysis": trend_analysis,
             "most_common_mood": max(mood_distribution.items(), key=lambda x: x[1])[0] if mood_distribution else "normal"
         }
+
+
+class MonthlyAttendanceLog(BaseModel, TimestampMixin):
+    """月次考勤操作日志"""
+    
+    monthly_id = fields.IntField(description="月次考勤ID")
+    operation = fields.CharField(max_length=20, description="操作类型")  # submit/approve/reject/withdraw
+    operator_id = fields.IntField(description="操作者ID")
+    from_status = fields.CharField(max_length=20, null=True, description="原状态")
+    to_status = fields.CharField(max_length=20, description="新状态")  
+    remark = fields.TextField(null=True, description="操作备注")
+    operated_at = fields.DatetimeField(auto_now_add=True, description="操作时间")
+    
+    class Meta:
+        table = "ses_monthly_attendance_log"
+        table_description = "月次考勤操作日志"

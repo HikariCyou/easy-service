@@ -241,10 +241,12 @@ class ChangeType(StrEnum):
     CANDIDATE_UPDATE = "candidate_update"  # 候補者更新
 
 class ApproveStatus(StrEnum):
-    PENDING="PENDING"
-    APPROVED = "APPROVED",
-    REJECT= "REJECT",
-    WITHDRAWN = "WITHDRAWN"
+    """审批状态枚举"""
+    DRAFT = "draft"  # 草稿状态（未提交）
+    PENDING = "pending"  # 等待审批
+    APPROVED = "approved"  # 已批准
+    REJECTED = "rejected"  # 已拒绝
+    WITHDRAWN = "withdrawn"  # 已撤回
 
 
 class WeeklyMoodStatus(StrEnum):
@@ -257,11 +259,5 @@ class WeeklyMoodStatus(StrEnum):
     DIFFICULT = "difficult" # 😞 困难/不好
 
 
-class MonthlySubmissionStatus(StrEnum):
-    """月度考勤提交状态枚举"""
-    DRAFT = "draft"         # 草稿（未提交）
-    SUBMITTED = "submitted" # 已提交
-    WITHDRAWN = "withdrawn" # 已撤回（可继续修改）
-    APPROVED = "approved"   # 已批准（不可修改）
-    REJECTED = "rejected"   # 已拒绝（可修改重新提交）
+# MonthlySubmissionStatus 已合并到 ApproveStatus，不再单独定义
 

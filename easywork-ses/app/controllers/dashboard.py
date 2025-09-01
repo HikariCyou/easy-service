@@ -13,7 +13,7 @@ from app.models.contract import Contract
 from app.models.evaluation import PersonEvaluation
 from app.models.enums import (
     PersonType, EmploymentStatus, CaseStatus, ContractStatus,
-    BPCompanyStatus, CandidateStatus
+    BPCompanyStatus, CandidateStatus, ApproveStatus, AttendanceType, WeeklyMoodStatus
 )
 
 
@@ -486,6 +486,726 @@ class DashboardController:
             "warning_alerts": warnings,
             "last_updated": datetime.now().isoformat()
         }
+
+
+    # =======================================
+    # 考勤Dashboard专用方法
+    # =======================================
+    
+    async def get_attendance_overview(
+        self, 
+        year_month: Optional[str] = None,
+        department: Optional[str] = None,
+        person_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        获取考勤概览统计
+        """
+        try:
+            from calendar import monthrange
+            from app.models.attendance import DailyAttendance, MonthlyAttendance
+            from app.models.enums import AttendanceType
+            
+            # 确定目标月份
+            if year_month:
+                year, month = map(int, year_month.split('-'))
+                target_date = date(year, month, 1)
+            else:
+                today = date.today()
+                target_date = date(today.year, today.month, 1)
+            
+            # 计算月份范围
+            last_day = monthrange(target_date.year, target_date.month)[1]
+            month_start = target_date
+            month_end = date(target_date.year, target_date.month, last_day)
+            
+            # 获取有效人员
+            personnel_query = Personnel.filter(is_active=True)
+            if person_type:
+                personnel_query = personnel_query.filter(person_type=person_type)
+            
+            total_personnel = await personnel_query.count()
+            working_personnel = await personnel_query.filter(
+                employment_status=EmploymentStatus.WORKING
+            ).count()
+            
+            # 获取当月考勤记录
+            attendance_query = DailyAttendance.filter(
+                work_date__gte=month_start,
+                work_date__lte=month_end
+            )
+            
+            total_records = await attendance_query.count()
+            # 日次考勤记录不再有审批状态，审批在月次层面
+            # approved_records = await attendance_query.filter(is_approved=True).count()
+            approved_records = 0  # 暂时设为0，实际应从MonthlyAttendance中计算
+            
+            # 计算各种出勤类型统计
+            normal_attendance = await attendance_query.filter(
+                attendance_type=AttendanceType.NORMAL
+            ).count()
+            
+            paid_leave = await attendance_query.filter(
+                attendance_type=AttendanceType.PAID_LEAVE
+            ).count()
+            
+            # 计算总工作时长和加班时长（需要预加载合同信息）
+            attendance_records = await attendance_query.prefetch_related("contract").all()
+            total_working_hours = 0
+            total_overtime_hours = 0
+            
+            for record in attendance_records:
+                total_working_hours += record.actual_working_hours or 0
+                # 预缓存合同信息以供overtime_hours属性使用
+                record._contract_cached = record.contract
+                total_overtime_hours += record.overtime_hours or 0
+            
+            # 计算提交完成率
+            monthly_submissions = await MonthlyAttendance.filter(
+                year_month=year_month or f"{target_date.year}-{target_date.month:02d}"
+            ).count()
+            
+            submitted_count = await MonthlyAttendance.filter(
+                year_month=year_month or f"{target_date.year}-{target_date.month:02d}",
+                status__in=[ApproveStatus.PENDING, ApproveStatus.APPROVED]
+            ).count()
+            
+            submission_rate = (submitted_count / monthly_submissions * 100) if monthly_submissions > 0 else 0
+            approval_rate = (approved_records / total_records * 100) if total_records > 0 else 0
+            attendance_rate = (normal_attendance / total_records * 100) if total_records > 0 else 0
+            
+            return {
+                "period": f"{target_date.year}-{target_date.month:02d}",
+                "personnel_summary": {
+                    "total_personnel": total_personnel,
+                    "working_personnel": working_personnel,
+                    "available_rate": round((working_personnel / total_personnel * 100), 1) if total_personnel > 0 else 0
+                },
+                "attendance_summary": {
+                    "total_records": total_records,
+                    "attendance_rate": round(attendance_rate, 1),
+                    "approval_rate": round(approval_rate, 1),
+                    "submission_rate": round(submission_rate, 1)
+                },
+                "time_summary": {
+                    "total_working_hours": round(total_working_hours, 1),
+                    "total_overtime_hours": round(total_overtime_hours, 1),
+                    "average_daily_hours": round((total_working_hours / max(total_records, 1)), 1),
+                    "overtime_rate": round((total_overtime_hours / max(total_working_hours, 1) * 100), 1) if total_working_hours > 0 else 0
+                },
+                "leave_summary": {
+                    "paid_leave_days": paid_leave,
+                    "leave_usage_rate": round((paid_leave / max(total_records, 1) * 100), 1)
+                }
+            }
+        except Exception as e:
+            raise Exception(f"考勤概览统计获取失败: {str(e)}")
+    
+    async def get_attendance_trend(
+        self,
+        period_type: str = "month",
+        periods: int = 6,
+        metric: str = "attendance_rate",
+        department: Optional[str] = None,
+        person_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        获取考勤趋势分析数据
+        """
+        try:
+            from app.models.attendance import DailyAttendance
+            from app.models.enums import AttendanceType
+            from calendar import monthrange
+            
+            today = date.today()
+            trend_data = []
+            
+            for i in range(periods):
+                if period_type == "month":
+                    # 月统计
+                    target_month = today.replace(day=1) - timedelta(days=32 * i)
+                    target_month = target_month.replace(day=1)
+                    
+                    # 计算该月的最后一天
+                    last_day = monthrange(target_month.year, target_month.month)[1]
+                    month_end = date(target_month.year, target_month.month, last_day)
+                    
+                    period_label = f"{target_month.year}-{target_month.month:02d}"
+                    
+                elif period_type == "week":
+                    # 周统计
+                    target_week_start = today - timedelta(weeks=i, days=today.weekday())
+                    target_week_end = target_week_start + timedelta(days=6)
+                    
+                    target_month = target_week_start
+                    month_end = target_week_end
+                    period_label = f"第{target_week_start.isocalendar()[1]}周"
+                    
+                elif period_type == "quarter":
+                    # 季度统计
+                    quarter_months = [
+                        (1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)
+                    ]
+                    current_quarter = (today.month - 1) // 3
+                    target_quarter = (current_quarter - i) % 4
+                    year_offset = (current_quarter - i) // 4
+                    
+                    target_year = today.year + year_offset
+                    quarter_start_month = quarter_months[target_quarter][0]
+                    quarter_end_month = quarter_months[target_quarter][2]
+                    
+                    target_month = date(target_year, quarter_start_month, 1)
+                    month_end = date(target_year, quarter_end_month, monthrange(target_year, quarter_end_month)[1])
+                    period_label = f"{target_year}Q{target_quarter + 1}"
+                
+                # 获取该时期的考勤数据（预加载合同）
+                attendance_records = await DailyAttendance.filter(
+                    work_date__gte=target_month,
+                    work_date__lte=month_end
+                ).prefetch_related("contract").all()
+                
+                # 为加班时间计算预缓存合同信息
+                for record in attendance_records:
+                    record._contract_cached = record.contract
+                
+                if metric == "attendance_rate":
+                    normal_count = len([r for r in attendance_records if r.attendance_type == AttendanceType.NORMAL])
+                    total_count = len(attendance_records)
+                    value = (normal_count / max(total_count, 1)) * 100
+                    
+                elif metric == "working_hours":
+                    value = sum(r.actual_working_hours or 0 for r in attendance_records)
+                    
+                elif metric == "overtime_hours":
+                    value = sum(r.overtime_hours or 0 for r in attendance_records)
+                    
+                elif metric == "leave_days":
+                    value = len([r for r in attendance_records if r.attendance_type != AttendanceType.NORMAL])
+                
+                trend_data.append({
+                    "period": period_label,
+                    "value": round(value, 1),
+                    "date": target_month.isoformat()
+                })
+            
+            # 按日期排序（最新的在最后）
+            trend_data.reverse()
+            
+            return {
+                "period_type": period_type,
+                "metric": metric,
+                "periods": periods,
+                "trend_data": trend_data,
+                "chart_config": {
+                    "x_axis": [item["period"] for item in trend_data],
+                    "y_axis": [item["value"] for item in trend_data],
+                    "unit": "%" if metric == "attendance_rate" else ("小时" if "hours" in metric else "天")
+                }
+            }
+        except Exception as e:
+            raise Exception(f"考勤趋势分析失败: {str(e)}")
+    
+    async def get_attendance_distribution(
+        self,
+        analysis_type: str = "department",
+        year_month: Optional[str] = None,
+        metric: str = "attendance_rate"
+    ) -> Dict[str, Any]:
+        """
+        获取考勤数据分布分析
+        """
+        try:
+            from app.models.attendance import DailyAttendance
+            from app.models.enums import AttendanceType
+            from calendar import monthrange
+            from collections import defaultdict
+            
+            # 确定分析月份
+            if year_month:
+                year, month = map(int, year_month.split('-'))
+                target_date = date(year, month, 1)
+            else:
+                today = date.today()
+                target_date = date(today.year, today.month, 1)
+            
+            last_day = monthrange(target_date.year, target_date.month)[1]
+            month_end = date(target_date.year, target_date.month, last_day)
+            
+            # 获取考勤记录（预加载合同和人员）
+            attendance_records = await DailyAttendance.filter(
+                work_date__gte=target_date,
+                work_date__lte=month_end
+            ).prefetch_related("contract__personnel").all()
+            
+            # 为加班时间计算预缓存合同信息
+            for record in attendance_records:
+                record._contract_cached = record.contract
+            
+            # 按分析维度分组
+            distribution_data = defaultdict(list)
+            
+            for record in attendance_records:
+                personnel = record.contract.personnel if hasattr(record, 'contract') and record.contract else None
+                if not personnel:
+                    continue
+                
+                if analysis_type == "person_type":
+                    key = personnel.person_type.value if personnel.person_type else "unknown"
+                elif analysis_type == "nationality":
+                    key = personnel.nationality or "unknown"
+                elif analysis_type == "age_group":
+                    if personnel.birthday:
+                        age = (date.today() - personnel.birthday).days // 365
+                        if age < 25:
+                            key = "25歳以下"
+                        elif age < 35:
+                            key = "25-35歳"
+                        elif age < 45:
+                            key = "35-45歳"
+                        else:
+                            key = "45歳以上"
+                    else:
+                        key = "年齢不明"
+                else:  # department
+                    key = "部门未分类"  # 根据实际需求设置
+                
+                distribution_data[key].append(record)
+            
+            # 计算各分组的指标
+            result_data = []
+            for group_name, records in distribution_data.items():
+                if metric == "attendance_rate":
+                    normal_count = len([r for r in records if r.attendance_type == AttendanceType.NORMAL])
+                    value = (normal_count / max(len(records), 1)) * 100
+                elif metric == "working_hours":
+                    value = sum(r.actual_working_hours or 0 for r in records) / max(len(records), 1)
+                elif metric == "overtime_rate":
+                    total_hours = sum(r.actual_working_hours or 0 for r in records)
+                    overtime_hours = sum(r.overtime_hours or 0 for r in records)
+                    value = (overtime_hours / max(total_hours, 1)) * 100
+                elif metric == "leave_rate":
+                    leave_count = len([r for r in records if r.attendance_type != AttendanceType.NORMAL])
+                    value = (leave_count / max(len(records), 1)) * 100
+                
+                result_data.append({
+                    "name": group_name,
+                    "value": round(value, 1),
+                    "count": len(records)
+                })
+            
+            # 按值排序
+            result_data.sort(key=lambda x: x["value"], reverse=True)
+            
+            return {
+                "analysis_type": analysis_type,
+                "metric": metric,
+                "period": f"{target_date.year}-{target_date.month:02d}",
+                "distribution_data": result_data,
+                "chart_config": {
+                    "pie_data": [{"name": item["name"], "value": item["value"]} for item in result_data],
+                    "bar_data": {
+                        "x_axis": [item["name"] for item in result_data],
+                        "y_axis": [item["value"] for item in result_data]
+                    }
+                }
+            }
+        except Exception as e:
+            raise Exception(f"考勤数据分布分析失败: {str(e)}")
+    
+    async def get_attendance_ranking(
+        self,
+        rank_type: str = "attendance_rate",
+        year_month: Optional[str] = None,
+        top_n: int = 10,
+        department: Optional[str] = None,
+        person_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        获取考勤排行榜
+        """
+        try:
+            from app.models.attendance import DailyAttendance
+            from app.models.enums import AttendanceType
+            from calendar import monthrange
+            from collections import defaultdict
+            
+            # 确定排名月份
+            if year_month:
+                year, month = map(int, year_month.split('-'))
+                target_date = date(year, month, 1)
+            else:
+                today = date.today()
+                target_date = date(today.year, today.month, 1)
+            
+            last_day = monthrange(target_date.year, target_date.month)[1]
+            month_end = date(target_date.year, target_date.month, last_day)
+            
+            # 获取考勤记录（按人员分组，预加载合同和人员）
+            attendance_records = await DailyAttendance.filter(
+                work_date__gte=target_date,
+                work_date__lte=month_end
+            ).prefetch_related("contract__personnel").all()
+            
+            # 为加班时间计算预缓存合同信息
+            for record in attendance_records:
+                record._contract_cached = record.contract
+            
+            # 按人员分组计算指标
+            personnel_stats = defaultdict(list)
+            for record in attendance_records:
+                if hasattr(record, 'contract') and record.contract and record.contract.personnel:
+                    personnel = record.contract.personnel
+                    personnel_stats[personnel.id].append(record)
+            
+            ranking_data = []
+            for personnel_id, records in personnel_stats.items():
+                if not records:
+                    continue
+                
+                personnel = records[0].contract.personnel
+                
+                # 应用筛选条件
+                if person_type and personnel.person_type.value != person_type:
+                    continue
+                
+                # 计算排名指标
+                if rank_type == "attendance_rate":
+                    normal_count = len([r for r in records if r.attendance_type == AttendanceType.NORMAL])
+                    score = (normal_count / max(len(records), 1)) * 100
+                    
+                elif rank_type == "working_hours":
+                    score = sum(r.actual_working_hours or 0 for r in records)
+                    
+                elif rank_type == "overtime_hours":
+                    score = sum(r.overtime_hours or 0 for r in records)
+                    
+                elif rank_type == "efficiency_score":
+                    # 工作效率评分（示例计算）
+                    total_hours = sum(r.actual_working_hours or 0 for r in records)
+                    overtime_hours = sum(r.overtime_hours or 0 for r in records)
+                    score = total_hours / max((total_hours + overtime_hours), 1) * 100
+                
+                ranking_data.append({
+                    "personnel_id": personnel.id,
+                    "name": personnel.name,
+                    "person_type": personnel.person_type.value if personnel.person_type else "",
+                    "company": getattr(personnel, 'company_name', ''),
+                    "score": round(score, 1),
+                    "record_count": len(records)
+                })
+            
+            # 排序（加班时长是反向排序）
+            reverse_sort = rank_type != "overtime_hours"
+            ranking_data.sort(key=lambda x: x["score"], reverse=reverse_sort)
+            
+            # 取前N名
+            ranking_data = ranking_data[:top_n]
+            
+            return {
+                "rank_type": rank_type,
+                "period": f"{target_date.year}-{target_date.month:02d}",
+                "top_n": top_n,
+                "ranking_data": ranking_data,
+                "chart_config": {
+                    "names": [item["name"] for item in ranking_data],
+                    "scores": [item["score"] for item in ranking_data],
+                    "unit": "%" if rank_type in ["attendance_rate", "efficiency_score"] else "小时"
+                }
+            }
+        except Exception as e:
+            raise Exception(f"考勤排行榜获取失败: {str(e)}")
+    
+    async def get_attendance_calendar_heatmap(
+        self,
+        year: int,
+        metric: str = "attendance_count",
+        user_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        获取考勤热力图数据
+        """
+        try:
+            from app.models.attendance import DailyAttendance
+            from app.models.enums import AttendanceType
+            from collections import defaultdict
+            
+            # 获取全年考勤记录
+            year_start = date(year, 1, 1)
+            year_end = date(year, 12, 31)
+            
+            query = DailyAttendance.filter(
+                work_date__gte=year_start,
+                work_date__lte=year_end
+            ).prefetch_related("contract")
+            
+            if user_id:
+                query = query.filter(contract__personnel__user_id=user_id)
+            
+            attendance_records = await query.all()
+            
+            # 为加班时间计算预缓存合同信息
+            for record in attendance_records:
+                record._contract_cached = record.contract
+            
+            # 按日期分组统计
+            daily_stats = defaultdict(list)
+            for record in attendance_records:
+                daily_stats[record.work_date].append(record)
+            
+            # 生成热力图数据
+            heatmap_data = []
+            current_date = year_start
+            
+            while current_date <= year_end:
+                records = daily_stats.get(current_date, [])
+                
+                if metric == "attendance_count":
+                    value = len(records)
+                elif metric == "working_hours":
+                    value = sum(r.actual_working_hours or 0 for r in records)
+                elif metric == "overtime_hours":
+                    value = sum(r.overtime_hours or 0 for r in records)
+                elif metric == "leave_count":
+                    value = len([r for r in records if r.attendance_type != AttendanceType.NORMAL])
+                
+                heatmap_data.append([current_date.isoformat(), round(value, 1)])
+                current_date += timedelta(days=1)
+            
+            return {
+                "year": year,
+                "metric": metric,
+                "user_id": user_id,
+                "heatmap_data": heatmap_data,
+                "chart_config": {
+                    "calendar": {
+                        "range": year,
+                        "cellSize": ["auto", 13]
+                    },
+                    "visualMap": {
+                        "min": 0,
+                        "max": max([item[1] for item in heatmap_data]) if heatmap_data else 10,
+                        "type": "piecewise",
+                        "orient": "horizontal",
+                        "left": "center"
+                    }
+                }
+            }
+        except Exception as e:
+            raise Exception(f"考勤热力图数据获取失败: {str(e)}")
+    
+    async def get_mood_analysis(
+        self,
+        user_id: int,
+        analysis_period: str = "month",
+        periods: int = 12,
+        analysis_type: str = "trend",
+        team_view: bool = False
+    ) -> Dict[str, Any]:
+        """
+        获取心情数据分析
+        """
+        try:
+            from app.models.attendance import WeeklyMood, DailyAttendance
+            from collections import defaultdict
+            
+            if team_view:
+                # 团队视图 - 需要管理员权限
+                mood_records = await WeeklyMood.filter(
+                    created_at__gte=datetime.now() - timedelta(weeks=periods * 4)
+                ).prefetch_related("user").all()
+            else:
+                # 个人视图
+                mood_records = await WeeklyMood.filter(
+                    user_id=user_id,
+                    created_at__gte=datetime.now() - timedelta(weeks=periods * 4)
+                ).all()
+            
+            if analysis_type == "trend":
+                # 心情趋势分析
+                mood_trend = defaultdict(list)
+                for record in mood_records:
+                    week_key = f"{record.year}-W{record.week_number:02d}"
+                    mood_trend[week_key].append(record.mood_score)
+                
+                trend_data = []
+                for week, scores in sorted(mood_trend.items()):
+                    avg_score = sum(scores) / len(scores) if scores else 0
+                    trend_data.append({
+                        "period": week,
+                        "score": round(avg_score, 1),
+                        "count": len(scores)
+                    })
+                
+                return {
+                    "analysis_type": "trend",
+                    "trend_data": trend_data,
+                    "chart_config": {
+                        "x_axis": [item["period"] for item in trend_data],
+                        "y_axis": [item["score"] for item in trend_data]
+                    }
+                }
+            
+            elif analysis_type == "distribution":
+                # 心情状态分布
+                mood_distribution = defaultdict(int)
+                for record in mood_records:
+                    mood_distribution[record.mood_status.value] += 1
+                
+                distribution_data = [
+                    {"name": status, "value": count}
+                    for status, count in mood_distribution.items()
+                ]
+                
+                return {
+                    "analysis_type": "distribution",
+                    "distribution_data": distribution_data,
+                    "total_records": len(mood_records)
+                }
+            
+            elif analysis_type == "correlation":
+                # 心情与考勤相关性分析（示例）
+                correlation_data = []
+                for record in mood_records:
+                    # 获取同期考勤数据进行关联分析
+                    week_start = datetime.strptime(f"{record.year}-W{record.week_number:02d}-1", "%Y-W%W-%w").date()
+                    week_end = week_start + timedelta(days=6)
+                    
+                    attendance_count = await DailyAttendance.filter(
+                        contract__personnel__user_id=record.user_id,
+                        work_date__gte=week_start,
+                        work_date__lte=week_end
+                    ).count()
+                    
+                    correlation_data.append({
+                        "mood_score": record.mood_score,
+                        "attendance_days": attendance_count,
+                        "week": f"{record.year}-W{record.week_number:02d}"
+                    })
+                
+                return {
+                    "analysis_type": "correlation",
+                    "correlation_data": correlation_data
+                }
+            
+        except Exception as e:
+            raise Exception(f"心情数据分析失败: {str(e)}")
+    
+    async def get_attendance_alerts(
+        self,
+        alert_level: Optional[str] = None,
+        alert_type: Optional[str] = None,
+        date_range: int = 7
+    ) -> Dict[str, Any]:
+        """
+        获取考勤预警信息
+        """
+        try:
+            from app.models.attendance import DailyAttendance, WeeklyMood
+            from app.models.enums import AttendanceType, WeeklyMoodStatus
+            from collections import defaultdict
+            
+            alerts = []
+            end_date = date.today()
+            start_date = end_date - timedelta(days=date_range)
+            
+            # 考勤异常预警
+            if not alert_type or alert_type == "attendance":
+                # 连续缺勤预警
+                absent_records = await DailyAttendance.filter(
+                    work_date__gte=start_date,
+                    work_date__lte=end_date,
+                    attendance_type__in=[AttendanceType.ABSENCE, AttendanceType.SICK_LEAVE]  # 使用正确的枚举值
+                ).prefetch_related("contract__personnel").all()
+                
+                personnel_absents = defaultdict(int)
+                for record in absent_records:
+                    if hasattr(record, 'contract') and record.contract and record.contract.personnel:
+                        personnel_absents[record.contract.personnel.id] += 1
+                
+                for personnel_id, absent_days in personnel_absents.items():
+                    if absent_days >= 3:  # 连续缺勤3天以上
+                        personnel = await Personnel.get(id=personnel_id)
+                        alerts.append({
+                            "type": "attendance",
+                            "level": "high" if absent_days >= 5 else "medium",
+                            "title": f"{personnel.name} 连续缺勤预警",
+                            "description": f"最近{date_range}天内缺勤{absent_days}天",
+                            "personnel_id": personnel_id,
+                            "data": {"absent_days": absent_days}
+                        })
+            
+            # 加班过度预警  
+            if not alert_type or alert_type == "overtime":
+                # 获取所有记录，然后在程序中筛选加班时长大于0的
+                potential_overtime_records = await DailyAttendance.filter(
+                    work_date__gte=start_date,
+                    work_date__lte=end_date
+                ).prefetch_related("contract__personnel").all()
+                
+                # 预缓存合同信息并筛选有加班的记录
+                overtime_records = []
+                for record in potential_overtime_records:
+                    record._contract_cached = record.contract
+                    if record.overtime_hours > 0:
+                        overtime_records.append(record)
+                
+                personnel_overtime = defaultdict(float)
+                for record in overtime_records:
+                    if hasattr(record, 'contract') and record.contract and record.contract.personnel:
+                        personnel_overtime[record.contract.personnel.id] += record.overtime_hours or 0
+                
+                for personnel_id, total_overtime in personnel_overtime.items():
+                    if total_overtime > 40:  # 周加班超过40小时
+                        personnel = await Personnel.get(id=personnel_id)
+                        alerts.append({
+                            "type": "overtime",
+                            "level": "critical" if total_overtime > 60 else "high",
+                            "title": f"{personnel.name} 加班过度预警",
+                            "description": f"最近{date_range}天加班{total_overtime:.1f}小时",
+                            "personnel_id": personnel_id,
+                            "data": {"overtime_hours": total_overtime}
+                        })
+            
+            # 心情状态预警
+            if not alert_type or alert_type == "mood":
+                recent_moods = await WeeklyMood.filter(
+                    created_at__gte=datetime.now() - timedelta(days=date_range)
+                ).all()
+                
+                for mood in recent_moods:
+                    if mood.mood_status in [WeeklyMoodStatus.STRESSED, WeeklyMoodStatus.DIFFICULT]:
+                        personnel = await Personnel.filter(user_id=mood.user_id).first()
+                        if personnel:
+                            alerts.append({
+                                "type": "mood",
+                                "level": "medium" if mood.mood_status == WeeklyMoodStatus.STRESSED else "high",
+                                "title": f"{personnel.name} 心情状态预警",
+                                "description": f"心情状态: {mood.mood_emoji} {mood.comment or ''}",
+                                "personnel_id": personnel.id,
+                                "data": {"mood_status": mood.mood_status.value}
+                            })
+            
+            # 按预警级别筛选
+            if alert_level:
+                alerts = [alert for alert in alerts if alert["level"] == alert_level]
+            
+            # 按级别和时间排序
+            level_priority = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+            alerts.sort(key=lambda x: level_priority.get(x["level"], 4))
+            
+            return {
+                "total_alerts": len(alerts),
+                "alert_summary": {
+                    "critical": len([a for a in alerts if a["level"] == "critical"]),
+                    "high": len([a for a in alerts if a["level"] == "high"]),
+                    "medium": len([a for a in alerts if a["level"] == "medium"]),
+                    "low": len([a for a in alerts if a["level"] == "low"])
+                },
+                "alerts": alerts,
+                "date_range": date_range
+            }
+        except Exception as e:
+            raise Exception(f"考勤预警信息获取失败: {str(e)}")
 
 
 # 全局实例

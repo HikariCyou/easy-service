@@ -1,6 +1,6 @@
 import httpx
 
-SSO_BASE_URL = "http://localhost:48080/admin-api/system/user"
+SSO_BASE_URL = "http://13.158.219.191:8081/admin-api/system/user"
 
 
 class UserClient:
