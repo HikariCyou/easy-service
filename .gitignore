@@ -16,3 +16,4 @@ db.sqlite3-wal
 ._.DS_Store
 .pdf
 static/*.pdf
+.jar
