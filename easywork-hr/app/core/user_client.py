@@ -1,6 +1,6 @@
 import httpx
 
-SSO_BASE_URL = "http://13.158.219.191:8081/admin-api/system/user"
+from app.settings.config import settings
 
 
 class UserClient:
@@ -9,7 +9,7 @@ class UserClient:
 
     async def get_user_by_id(self, user_id: int, token = None) -> dict:
         headers = {"Authorization": f"{token}"} if token else {}
-        resp = await self.client.get(f"{SSO_BASE_URL}/get", params={"id": user_id}, headers=headers)
+        resp = await self.client.get(f"{settings.SSO_BASE_URL}/user/get", params={"id": user_id}, headers=headers)
         if resp.status_code != 200:
             raise Exception("SSO user service error")
         body = resp.json()
@@ -23,7 +23,7 @@ class UserClient:
         返回: {user_id: user_info, ...}
         """
         headers = {"Authorization": f"{token}"} if token else {}
-        resp = await self.client.post(f"{SSO_BASE_URL}/batch", json={"ids": user_ids}, headers=headers)
+        resp = await self.client.post(f"{settings.SSO_BASE_URL}/user/batch", json={"ids": user_ids}, headers=headers)
         if resp.status_code != 200:
             raise Exception("SSO user batch service error")
         body = resp.json()

@@ -1,6 +1,6 @@
 import httpx
 
-SSO_BASE_URL = "http://13.158.219.191:8081/admin-api/system/auth"
+from app.settings.config import settings
 
 
 class AuthClient:
@@ -12,7 +12,7 @@ class AuthClient:
         调用 SSO 校验 token，返回用户信息 dict
         """
         try:
-            resp = await self.client.get(f"{SSO_BASE_URL}/validate", params={"token": token})
+            resp = await self.client.get(f"{settings.SSO_BASE_URL}/auth/validate", params={"token": token})
         except httpx.RequestError:
             raise Exception("SSO service unavailable")
 

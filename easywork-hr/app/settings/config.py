@@ -94,6 +94,10 @@ class Settings(BaseSettings):
         "timezone": "Asia/Tokyo",  # Timezone setting
     }
     DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+    
+    # External Service URLs
+    SSO_BASE_URL: str = "http://13.158.219.191:8081/admin-api/system"
+    PROCESS_BASE_URL: str = "http://13.158.219.191:8081/admin-api/bpm/starter"
 
 
 settings = Settings()

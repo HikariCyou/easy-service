@@ -1,7 +1,7 @@
 
 import httpx
 
-PROCESS_BASE_URL = "http://localhost:48080/admin-api/bpm/starter"
+from app.settings.config import settings
 
 
 class ProcessClient:
@@ -16,7 +16,7 @@ class ProcessClient:
         """
         headers = {"Authorization": f"{token}"} if token else {}
         resp = await self.client.post(
-            f"{PROCESS_BASE_URL}/run",
+            f"{settings.PROCESS_BASE_URL}/run",
             json={"processKey": process_key, "businessKey": business_key, "variables": variables},
             headers=headers,
         )
