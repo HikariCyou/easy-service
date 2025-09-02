@@ -10,6 +10,7 @@ from app.core.dependency import get_current_employee
 from app.core.user_client import user_client
 from app.core.process_client import  process_client
 from app.models import EmployeeAddress, EmployeeEmergencyContact
+from app.models.employee import Personnel
 from app.schemas import Success,Fail
 from app.schemas.employee import EmployeeAddressSchema, EmployeeSchema, EmployeeEmergencyContactSchema, \
     EmployeeBankSchema, EmployeeResidenceStatusSchema, EmployeeUpdateSchema, EmployeePassportSchema, \
@@ -111,7 +112,7 @@ async def get_employee_address(
     従業員の住所と連絡先情報を取得
     """
     employee_id = employee.id
-    employee_address = await EmployeeAddress.get_or_none(employee_id=employee_id)
+    employee_address = await EmployeeAddress.get_or_none(personnel_id=employee_id)
     if  employee_address:
         return Success(data=await employee_address.to_dict())
     return None
@@ -138,7 +139,7 @@ async def get_emergency_contact(
     従業員の緊急連絡先情報を取得
     """
     employee_id = employee.id
-    emergency_contact = await EmployeeEmergencyContact.get_or_none(employee_id=employee_id)
+    emergency_contact = await EmployeeEmergencyContact.get_or_none(personnel_id=employee_id)
     if emergency_contact:
         return Success(data=await emergency_contact.to_dict())
     return Fail(msg="緊急連絡先が見つかりません")

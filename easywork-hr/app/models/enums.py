@@ -109,3 +109,52 @@ class DocumentType(StrEnum):
     # その他
     OTHER = "その他"
 
+
+# === SES統合用追加Enum ===
+
+class PersonType(StrEnum):
+    BP_EMPLOYEE = "bp_employee"  # BP社員
+    FREELANCER = "freelancer"  # フリーランス
+    EMPLOYEE = "employee"  # 自社社員
+    @classmethod
+    def get_label(cls, value: str) -> str:
+        return _PERSON_TYPE_LABELS.get(value, value)
+
+_PERSON_TYPE_LABELS = {
+    PersonType.BP_EMPLOYEE: "BP社員",
+    PersonType.FREELANCER: "個人事業主",
+    PersonType.EMPLOYEE: "自社社員",
+}
+
+
+class MarriageStatus(StrEnum):
+    SINGLE = "独身"  # 結婚していない
+    MARRIED = "既婚"  # 結婚している
+    DIVORCED = "離婚"  # 結婚を解消している
+    WIDOWED = "死別"  # 死別
+    OTHER = "その他"  # その他
+
+
+class JapaneseLevel(StrEnum):
+    NATIVE = "native"  # ネイティブ
+    N1 = "N1"  # JLPT N1
+    N2 = "N2"  # JLPT N2
+    N3 = "N3"  # JLPT N3
+    N4 = "N4"  # JLPT N4
+    N5 = "N5"  # JLPT N5
+    BEGINNER = "Beginner"  # 初級
+
+
+class EmploymentStatus(StrEnum):
+    AVAILABLE = "稼働可能"  # 稼働可能
+    WORKING = "稼働中"  # 稼働中
+    VACATION = "休暇中"  # 休暇中
+    UNAVAILABLE = "稼働不可"  # 稼働不可
+    RETIRED = "退職"  # 退職
+
+
+class DecimalProcessingType(StrEnum):
+    ROUND = "四捨五入"  # 四捨五入
+    FLOOR = "切り捨て"  # 切り捨て
+    CEIL = "切り上げ"  # 切り上げ
+

@@ -8,6 +8,7 @@ from app.models import EmployeeType
 class EmployeeSchema(BaseModel):
     user_id: Optional[int] = Field(None, description="関連したユーザーID", example=1)
     birthday: str = Field(default=None, description="生年月日", example="1990-01-01")
+    nickname: Optional[str] = Field(None, max_length=50, description="ニックネーム", example="Taro")
     code: Optional[str] = Field(None, max_length=20, description="社員番号", example="EMP001")
     joining_time: Optional[str] = Field(None, description="入社時間", example="2020-01-01")
     position: Optional[str] = Field(None, max_length=255, description="役職", example="Software Engineer")
