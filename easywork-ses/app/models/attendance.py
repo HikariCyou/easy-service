@@ -14,7 +14,7 @@ class DailyAttendance(BaseModel, TimestampMixin):
     """
     user_id = fields.BigIntField(default=None , null=True, description="user_id")
 
-    contract = fields.ForeignKeyField("models.Contract", related_name="daily_attendances", description="対象契約")
+    contract = fields.ForeignKeyField("models.Contract", related_name="daily_attendances", description="対象契約" , null=True)
     work_date = fields.DateField(description="勤務日")
 
     # 出退勤時刻

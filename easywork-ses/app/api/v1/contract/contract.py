@@ -156,9 +156,13 @@ async def get_contract_history(contract_id: int, limit: int = Query(10, ge=1, le
             return Fail(msg="契約が見つかりません")
             
         # 変更履歴を取得
-        histories = await ContractChangeHistory.filter(
-            contract=contract
-        ).order_by("-created_at").limit(limit)
+        try:
+            histories = await ContractChangeHistory.filter(
+                contract=contract
+            ).order_by("-created_at").limit(limit)
+        except Exception as e:
+            # テーブルが存在しない場合の対応
+            return Success(data=[], msg="変更履歴テーブルが初期化されていません")
         
         # レスポンス形式に変換
         data = []
@@ -317,5 +321,166 @@ async def get_contract_amendments(contract_id: int):
             data.append(await amendment.to_dict())
             
         return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/{contract_id}/calculate", summary="契約精算計算")
+async def calculate_contract_payment(contract_id: int, actual_hours: float = Query(..., description="実稼働時間")):
+    """契約の月額精算を計算"""
+    try:
+        from app.models.contract import Contract
+        
+        # 契約を取得
+        contract = await Contract.get_or_none(id=contract_id)
+        if not contract:
+            return Fail(msg="契約が見つかりません")
+            
+        # 精算計算を実行
+        calculation_result = await contract.calculate_monthly_payment(actual_hours)
+        
+        return Success(data=calculation_result)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/{contract_id}/items", summary="契約精算項目一覧取得")
+async def get_contract_calculation_items(contract_id: int):
+    """契約の精算項目一覧を取得"""
+    try:
+        from app.models.contract import Contract, ContractCalculationItem
+        
+        # 契約を取得
+        contract = await Contract.get_or_none(id=contract_id)
+        if not contract:
+            return Fail(msg="契約が見つかりません")
+            
+        # 精算項目一覧を取得
+        items = await ContractCalculationItem.filter(
+            contract=contract
+        ).order_by("sort_order", "created_at")
+        
+        data = []
+        for item in items:
+            data.append({
+                "id": item.id,
+                "item_name": item.item_name,
+                "item_type": item.item_type,
+                "amount": item.amount,
+                "payment_unit": item.payment_unit,
+                "comment": item.comment,
+                "is_active": item.is_active,
+                "is_deduction": item.is_deduction,
+                "sort_order": item.sort_order,
+                "created_at": item.created_at
+            })
+            
+        return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/{contract_id}/items", summary="契約精算項目作成")
+async def create_contract_calculation_item(contract_id: int, data: dict):
+    """契約精算項目を作成"""
+    try:
+        from app.models.contract import Contract, ContractCalculationItem
+        
+        # 契約を取得
+        contract = await Contract.get_or_none(id=contract_id)
+        if not contract:
+            return Fail(msg="契約が見つかりません")
+            
+        # 精算項目を作成
+        item = await ContractCalculationItem.create(
+            contract=contract,
+            item_name=data.get("item_name"),
+            item_type=data.get("item_type"),
+            amount=float(data.get("amount", 0)),
+            payment_unit=data.get("payment_unit"),
+            comment=data.get("comment"),
+            is_active=data.get("is_active", True),
+            sort_order=data.get("sort_order", 0)
+        )
+        
+        result = {
+            "id": item.id,
+            "item_name": item.item_name,
+            "item_type": item.item_type,
+            "amount": item.amount,
+            "payment_unit": item.payment_unit,
+            "comment": item.comment,
+            "is_active": item.is_active,
+            "is_deduction": item.is_deduction,
+            "sort_order": item.sort_order,
+            "created_at": item.created_at
+        }
+        
+        return Success(data=result, msg="契約精算項目が作成されました")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.put("/items/{item_id}", summary="契約精算項目更新")
+async def update_contract_calculation_item(item_id: int, data: dict):
+    """契約精算項目を更新"""
+    try:
+        from app.models.contract import ContractCalculationItem
+        
+        # 精算項目を取得
+        item = await ContractCalculationItem.get_or_none(id=item_id)
+        if not item:
+            return Fail(msg="精算項目が見つかりません")
+            
+        # 項目を更新
+        if "item_name" in data:
+            item.item_name = data["item_name"]
+        if "item_type" in data:
+            item.item_type = data["item_type"]
+        if "amount" in data:
+            item.amount = float(data["amount"])
+        if "payment_unit" in data:
+            item.payment_unit = data["payment_unit"]
+        if "comment" in data:
+            item.comment = data["comment"]
+        if "is_active" in data:
+            item.is_active = data["is_active"]
+        if "sort_order" in data:
+            item.sort_order = data["sort_order"]
+            
+        await item.save()
+        
+        result = {
+            "id": item.id,
+            "item_name": item.item_name,
+            "item_type": item.item_type,
+            "amount": item.amount,
+            "payment_unit": item.payment_unit,
+            "comment": item.comment,
+            "is_active": item.is_active,
+            "is_deduction": item.is_deduction,
+            "sort_order": item.sort_order,
+            "updated_at": item.updated_at
+        }
+        
+        return Success(data=result, msg="契約精算項目が更新されました")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.delete("/items/{item_id}", summary="契約精算項目削除")
+async def delete_contract_calculation_item(item_id: int):
+    """契約精算項目を削除"""
+    try:
+        from app.models.contract import ContractCalculationItem
+        
+        # 精算項目を取得
+        item = await ContractCalculationItem.get_or_none(id=item_id)
+        if not item:
+            return Fail(msg="精算項目が見つかりません")
+            
+        await item.delete()
+        
+        return Success(msg="契約精算項目が削除されました")
     except Exception as e:
         return Fail(msg=str(e))

@@ -201,6 +201,32 @@ class ContractChangeReason(StrEnum):
     OTHER = "その他"  # その他
 
 
+class ContractItemType(StrEnum):
+    """契約項目種別"""
+    BASIC_SALARY = "基本給"  # 基本給
+    OVERTIME_FEE = "残業代"  # 残業代
+    ABSENCE_DEDUCTION = "欠勤控除"  # 欠勤控除
+    BONUS = "賞与"  # 賞与
+    ALLOWANCE = "手当"  # 手当
+    TRANSPORTATION = "交通費"  # 交通費
+    WELFARE = "福利厚生費"  # 福利厚生費
+    OTHER_FEE = "その他費用"  # その他費用
+    OTHER_DEDUCTION = "その他控除"  # その他控除
+
+
+class PaymentUnit(StrEnum):
+    """支払い単位"""
+    YEN_PER_MONTH = "円/月"  # 円/月
+    YEN_PER_HOUR = "円/時間"  # 円/時間
+    YEN_PER_DAY = "円/日"  # 円/日
+    YEN_PER_MINUTE = "円/分"  # 円/分
+    TEN_THOUSAND_YEN_PER_MONTH = "万円/月"  # 万円/月
+    PERCENTAGE = "％"  # パーセンテージ
+    FIXED_AMOUNT = "固定額"  # 固定額
+
+
+
+
 class AttendanceType(StrEnum):
     NORMAL = "通常出勤"  # 通常出勤
     PAID_LEAVE = "有給休暇"  # 有給休暇

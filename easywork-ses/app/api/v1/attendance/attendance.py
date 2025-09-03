@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date, datetime, timezone
 from typing import Optional, List, Union
 from fastapi import APIRouter, Query, Body, HTTPException, Header, BackgroundTasks
@@ -281,45 +282,6 @@ async def get_attendance_stats(
     except Exception as e:
         return Fail(msg=str(e))
 
-
-@router.get("/export", summary="出勤データエクスポート")
-async def export_attendance_data(
-    format: str = Query("excel", description="エクスポート形式", pattern="^(excel|csv)$"),
-    user_id: Optional[int] = Query(None, description="ユーザーID"),
-    contract_id: Optional[int] = Query(None, description="契約ID"),
-    start_date: Optional[date] = Query(None, description="開始日"),
-    end_date: Optional[date] = Query(None, description="終了日"),
-    include_summary: bool = Query(True, description="サマリー情報を含む")
-):
-    """
-    出勤データをエクスポート
-    
-    対応形式: Excel、CSV
-    日次記録と月次集計の両方をエクスポート可能
-    
-    注意: このエンドポイントは予約済み
-    実装時は指定形式のファイルを生成し、ダウンロードURLを返す
-    """
-    try:
-        # エクスポート機能の予約エンドポイント
-        export_params = {
-            "format": format,
-            "filters": {
-                "user_id": user_id,
-                "contract_id": contract_id,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None
-            },
-            "include_summary": include_summary
-        }
-        
-        return Success(data={
-            "export_params": export_params,
-            "download_url": None,
-            "note": "出勤データエクスポート機能は今後のバージョンで提供予定です"
-        })
-    except Exception as e:
-        return Fail(msg=str(e))
 
 
 @router.get("/user", summary="ユーザー勤怠情報取得")
@@ -878,3 +840,26 @@ async def get_monthly_attendance_status(
         return Success(data=status)
     except Exception as e:
         return Fail(msg=str(e))
+
+
+@router.get("/export", summary="出勤データエクスポート")
+async def export_attendance_data(
+        user_id: Optional[int] = Query(None, description="ユーザーID"),
+        year_month: Optional[str] = Query(None, description="対象年月（YYYY-MM）"),
+        include_summary: bool = Query(True, description="サマリー情報を含む")
+):
+    try:
+        current_user_id = CTX_USER_ID.get()
+        target_user_id = user_id if user_id else current_user_id
+
+        response = await attendance_controller.get_attendance_data_for_export(
+            user_id=target_user_id,
+            year_month=year_month,
+            include_summary=include_summary
+        )
+
+        return response
+
+
+    except Exception as e:
+        print(str(e))

@@ -1,7 +1,10 @@
+from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
+from io import BytesIO
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
-
+import pandas as pd
+from starlette.responses import StreamingResponse
 from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
@@ -9,18 +12,18 @@ from app.core.ctx import CTX_USER_ID
 from app.models.attendance import DailyAttendance, MonthlyAttendance, WeeklyMood, MonthlyAttendanceLog
 from app.models.contract import Contract
 from app.models.personnel import Personnel
-from app.models.case import Case
-from app.models.client import ClientCompany
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Alignment, Font, Border, Side
+from openpyxl import load_workbook
+
 from app.models.enums import AttendanceType, ApproveStatus, WeeklyMoodStatus
 from app.schemas.attendance import (
     DailyAttendanceSchema,
     CreateDailyAttendanceSchema, 
     UpdateDailyAttendanceSchema,
-    MonthlyAttendanceSchema,
-    AttendanceSummarySchema,
     AttendanceStatsSchema,
-    AttendanceCalendarSchema
 )
+from app.utils.common import to_hhmm
 
 
 class AttendanceController:
@@ -45,7 +48,8 @@ class AttendanceController:
 
         # 重複チェック
         existing = await DailyAttendance.get_or_none(
-            contract_id=current_contract.id,
+            user_id=user_id,
+            # contract_id=current_contract.id,
             work_date=attendance_data.work_date
         )
         if existing:
@@ -54,7 +58,7 @@ class AttendanceController:
         # 出勤記録作成
         attendance = await DailyAttendance.create(
             user_id=user_id or attendance_data.user_id,
-            contract_id=current_contract.id,
+            contract_id=  current_contract.id if current_contract else None,
             work_date=attendance_data.work_date,
             start_time=attendance_data.start_time if attendance_data.start_time else None,
             end_time=attendance_data.end_time if attendance_data.end_time else None,
@@ -487,26 +491,7 @@ class AttendanceController:
             contract_end_date__gte=target_date
         ).prefetch_related('case', 'case__client_company').all()
 
-        if not current_contracts:
-            # 契約がない場合は基本情報のみ返す
-            return {
-                "user_id": user_id,
-                "personnel": await personnel.to_dict(),
-                "contracts": [],
-                "attendance_data": [],
-                "period_info": {
-                    "period_type": period_type,
-                    "target_date": target_date.isoformat(),
-                    "start_date": target_date.isoformat(),
-                    "end_date": target_date.isoformat()
-                },
-                "summary": {
-                    "total_working_hours": 0.0,
-                    "total_days": 0,
-                    "approved_days": 0,
-                    "pending_approval_days": 0
-                }
-            }
+
 
         # 期間の計算
         if period_type == "day":
@@ -1188,6 +1173,323 @@ class AttendanceController:
         })
         
         return monthly_dict
+
+    async def get_attendance_data_for_export(self, user_id: int, year_month: str,
+                                             include_summary: bool) -> StreamingResponse:
+        year, month = map(int, year_month.split('-'))
+        from calendar import monthrange
+        from datetime import date
+        from tortoise.expressions import Q
+
+        start_date = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        end_date = date(year, month, last_day)
+
+        q = Q()
+        if user_id:
+            q &= Q(user_id=user_id)
+        q &= Q(work_date__gte=start_date) & Q(work_date__lte=end_date)
+
+        attendances = await DailyAttendance.filter(q).order_by('work_date').prefetch_related('contract').all()
+
+        data_rows = []
+        for att in attendances:
+            start_time = to_hhmm(att.start_time)
+            end_time = to_hhmm(att.end_time)
+            lunch_break = f"{att.lunch_break_minutes // 60:02d}:{att.lunch_break_minutes % 60:02d}" if att.lunch_break_minutes > 0 else ""
+            evening_break = f"{att.evening_break_minutes // 60:02d}:{att.evening_break_minutes % 60:02d}" if att.evening_break_minutes > 0 else ""
+            actual_hours = att.actual_working_hours
+            working_hours = f"{int(actual_hours):02d}:{int((actual_hours % 1) * 60):02d}" if actual_hours > 0 else ""
+            content = att.remark or ''
+            # 添加出勤类型和日文星期
+            attendance_type = att.attendance_type if hasattr(att, 'attendance_type') else AttendanceType.NORMAL
+            
+            # 日文星期映射
+            weekday_jp = {
+                'Monday': '月', 'Tuesday': '火', 'Wednesday': '水',
+                'Thursday': '木', 'Friday': '金', 'Saturday': '土', 'Sunday': '日'
+            }
+            weekday = weekday_jp.get(att.work_date.strftime('%A'), '')
+            
+            data_rows.append([
+                att.work_date.strftime('%m/%d'),  # 日本式日期格式
+                weekday,                          # 日文星期
+                start_time,
+                end_time,
+                lunch_break,
+                evening_break,
+                working_hours,
+                attendance_type,  # 出勤区分
+                content
+            ])
+
+        # サマリー計算（actual_working_hoursはpropertyなので手動計算）
+        total_hours = sum(att.actual_working_hours for att in attendances)
+        working_days = len([a for a in attendances if a.attendance_type == AttendanceType.NORMAL])
+        paid_leave_days = len([a for a in attendances if a.attendance_type == AttendanceType.PAID_LEAVE])
+        business_days = len(set(a.work_date for a in attendances))
+
+        # 获取真实的用户信息
+        from app.models.personnel import Personnel
+        from app.models.case import Case
+        
+        name = "不明"
+        department = "不明"
+        project = ""
+        
+        if attendances:
+            # 从第一个考勤记录获取用户ID
+            first_attendance = attendances[0]
+            personnel = await Personnel.get_or_none(user_id=first_attendance.user_id)
+            if personnel:
+                name = personnel.name
+                # 从合同获取案件信息
+                if hasattr(first_attendance, 'contract') and first_attendance.contract:
+                    contract = first_attendance.contract
+                    case = await Case.get_or_none(id=contract.case_id)
+                    if case:
+                        project = case.title or ""
+                        # 可以从case获取部门信息，如果有的话
+                        # department = case.department or "不明"
+        title_month = year_month or start_date.strftime('%Y-%m')
+
+        df = pd.DataFrame(data_rows,
+                          columns=['日付', '曜日', '開始時刻', '退勤時刻', '昼休憩', '夜休憩', '作業時間', '出勤区分', '備考'])
+
+        # 4. 写入 Excel带美化格式
+        from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
+        from openpyxl.utils import get_column_letter
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='勤怠表', startrow=7)  # 数据从第8行开始
+            ws = writer.sheets['勤怠表']
+
+            # 设置表格样式
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # 标题样式
+            header_fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
+            header_font = Font(color='FFFFFF', bold=True, size=11)
+            
+            # 日本式主标题（更简洁）
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
+            title_cell = ws.cell(row=1, column=1, value=f"{title_month}月 勤怠表")
+            title_cell.font = Font(size=14, bold=True)
+            title_cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[1].height = 30
+
+            # 美化的基本信息区域
+            info_font = Font(size=10)
+            info_bold_font = Font(size=10, bold=True)
+            
+            # 第一行：氏名区域（合并单元格）
+            ws.merge_cells('A3:B3')
+            ws['A3'] = '氏名'
+            ws['A3'].font = info_bold_font
+            ws['A3'].alignment = Alignment(horizontal='center', vertical='center')
+            ws['A3'].fill = PatternFill(start_color='E8E8E8', end_color='E8E8E8', fill_type='solid')
+            
+            ws.merge_cells('C3:F3')
+            ws['C3'] = name
+            ws['C3'].font = info_font
+            ws['C3'].alignment = Alignment(horizontal='left', vertical='center')
+            
+            # 所属区域
+            ws.merge_cells('G3:H3')
+            ws['G3'] = '所属'
+            ws['G3'].font = info_bold_font
+            ws['G3'].alignment = Alignment(horizontal='center', vertical='center')
+            ws['G3'].fill = PatternFill(start_color='E8E8E8', end_color='E8E8E8', fill_type='solid')
+            
+            ws['I3'] = department if department != '不明' else ''
+            ws['I3'].font = info_font
+            ws['I3'].alignment = Alignment(horizontal='left', vertical='center')
+            
+            # 第二行：案件名区域（合并单元格）
+            ws.merge_cells('A4:B4')
+            ws['A4'] = '案件名'
+            ws['A4'].font = info_bold_font
+            ws['A4'].alignment = Alignment(horizontal='center', vertical='center')
+            ws['A4'].fill = PatternFill(start_color='E8E8E8', end_color='E8E8E8', fill_type='solid')
+            
+            ws.merge_cells('C4:I4')
+            ws['C4'] = project
+            ws['C4'].font = info_font
+            ws['C4'].alignment = Alignment(horizontal='left', vertical='center')
+            
+            # 给信息区域加边框
+            for row in [3, 4]:
+                for col in range(1, 10):
+                    ws.cell(row=row, column=col).border = thin_border
+                    
+            ws.row_dimensions[3].height = 22
+            ws.row_dimensions[4].height = 22
+
+            # 日本式表头（双线边框）
+            thick_border = Border(
+                left=Side(style='medium'),
+                right=Side(style='medium'),
+                top=Side(style='medium'),
+                bottom=Side(style='medium')
+            )
+            
+            for col in range(1, 10):  # 9列
+                header_cell = ws.cell(row=8, column=col)
+                header_cell.fill = PatternFill(start_color='D9D9D9', end_color='D9D9D9', fill_type='solid')  # 浅灰色
+                header_cell.font = Font(bold=True, size=9)
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                header_cell.border = thick_border
+                
+            ws.row_dimensions[8].height = 22
+            
+            # 数据行（细边框，交替背景）
+            light_fill = PatternFill(start_color='F8F8F8', end_color='F8F8F8', fill_type='solid')
+            
+            for row in range(9, 9 + len(data_rows)):
+                ws.row_dimensions[row].height = 18
+                # 偶数行添加浅色背景
+                is_even_row = (row - 9) % 2 == 1
+                
+                for col in range(1, 10):
+                    cell = ws.cell(row=row, column=col)
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal='center', vertical='center')
+                    cell.font = Font(size=9)
+                    
+                    if is_even_row:
+                        cell.fill = light_fill
+                    
+                    # 特殊列的对齐方式
+                    if col == 9:  # 备注列左对齐
+                        cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                    elif col == 8:  # 出勤区分列小字体
+                        cell.font = Font(size=8)
+                        
+            # 日本式Excel列宽设置
+            column_widths = [6, 4, 8, 8, 6, 6, 8, 10, 25]  # 更紧凑的列宽
+            for i, width in enumerate(column_widths, 1):
+                ws.column_dimensions[get_column_letter(i)].width = width
+
+            # 美化的汇总区域（左右分布式布局）
+            summary_row = 9 + len(data_rows) + 2  # 空一行
+            summary_fill = PatternFill(start_color='F0F0F0', end_color='F0F0F0', fill_type='solid')
+            summary_font = Font(bold=True, size=11)
+            
+            total_hours_formatted = f"{int(total_hours):02d}:{int((total_hours % 1) * 60):02d}"
+            
+            # 左侧：合计标题（合并3列）
+            ws.merge_cells(start_row=summary_row, start_column=1, end_row=summary_row + 1, end_column=3)
+            total_title = ws.cell(row=summary_row, column=1, value='合　計')
+            total_title.font = Font(bold=True, size=14)
+            total_title.alignment = Alignment(horizontal='center', vertical='center')
+            total_title.fill = summary_fill
+            
+            # 为合计区域的每个单元格添加边框（使用细边框）
+            for row in range(summary_row, summary_row + 2):
+                for col in range(1, 4):
+                    cell = ws.cell(row=row, column=col)
+                    cell.border = thin_border
+            
+            # 右侧统计信息区域（6列，分两行显示）
+            stats_titles = ['出勤日数', '有給取得', '総稼働時間']
+            stats_values = [f'{working_days}日', f'{paid_leave_days}日', total_hours_formatted]
+            
+            # 上行：统计项目名称 - 先设置样式，再合并单元格
+            for i, title in enumerate(stats_titles):
+                col = 4 + i * 2
+                # 先为要合并的单元格设置样式
+                for c in range(col, col + 2):
+                    title_cell = ws.cell(row=summary_row, column=c)
+                    title_cell.font = Font(bold=True, size=9)
+                    title_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    title_cell.fill = PatternFill(start_color='D9D9D9', end_color='D9D9D9', fill_type='solid')
+                    title_cell.border = thin_border
+                
+                # 然后设置值并合并
+                ws.cell(row=summary_row, column=col, value=title)
+                ws.merge_cells(start_row=summary_row, start_column=col, end_row=summary_row, end_column=col + 1)
+                
+            # 下行：统计数值 - 先设置样式，再合并单元格
+            for i, value in enumerate(stats_values):
+                col = 4 + i * 2
+                # 先为要合并的单元格设置样式
+                for c in range(col, col + 2):
+                    value_cell = ws.cell(row=summary_row + 1, column=c)
+                    value_cell.font = Font(bold=True, size=11)
+                    value_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    value_cell.fill = summary_fill
+                    value_cell.border = thin_border
+                
+                # 然后设置值并合并
+                ws.cell(row=summary_row + 1, column=col, value=value)
+                ws.merge_cells(start_row=summary_row + 1, start_column=col, end_row=summary_row + 1, end_column=col + 1)
+                
+            # 设置汇总区域行高
+            ws.row_dimensions[summary_row].height = 25
+            ws.row_dimensions[summary_row + 1].height = 25
+            
+            # 为整个报表添加蓝色外边框
+            blue_border = Border(
+                left=Side(style='medium', color='1f497d'),
+                right=Side(style='medium', color='1f497d'),
+                top=Side(style='medium', color='1f497d'),
+                bottom=Side(style='medium', color='1f497d')
+            )
+            
+            # 确定报表边界
+            max_row = summary_row + 1
+            max_col = 9
+            
+            # 添加外边框
+            # 顶部边框
+            for col in range(1, max_col + 1):
+                ws.cell(row=1, column=col).border = Border(
+                    top=Side(style='medium', color='1f497d'),
+                    left=ws.cell(row=1, column=col).border.left,
+                    right=ws.cell(row=1, column=col).border.right,
+                    bottom=ws.cell(row=1, column=col).border.bottom
+                )
+            
+            # 底部边框
+            for col in range(1, max_col + 1):
+                ws.cell(row=max_row, column=col).border = Border(
+                    bottom=Side(style='medium', color='1f497d'),
+                    left=ws.cell(row=max_row, column=col).border.left,
+                    right=ws.cell(row=max_row, column=col).border.right,
+                    top=ws.cell(row=max_row, column=col).border.top
+                )
+            
+            # 左侧边框
+            for row in range(1, max_row + 1):
+                ws.cell(row=row, column=1).border = Border(
+                    left=Side(style='medium', color='1f497d'),
+                    top=ws.cell(row=row, column=1).border.top,
+                    right=ws.cell(row=row, column=1).border.right,
+                    bottom=ws.cell(row=row, column=1).border.bottom
+                )
+            
+            # 右侧边框
+            for row in range(1, max_row + 1):
+                ws.cell(row=row, column=max_col).border = Border(
+                    right=Side(style='medium', color='1f497d'),
+                    left=ws.cell(row=row, column=max_col).border.left,
+                    top=ws.cell(row=row, column=max_col).border.top,
+                    bottom=ws.cell(row=row, column=max_col).border.bottom
+                )
+
+        output.seek(0)
+        headers = {
+            'Content-Disposition': 'attachment; filename="attendance_export.xlsx"'
+        }
+        return StreamingResponse(output,
+                                 media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                 headers=headers)
 
 
 # グローバルインスタンス

@@ -1,6 +1,5 @@
 from datetime import date, datetime
-from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from pydantic import BaseModel, Field
 
@@ -53,8 +52,8 @@ class EarlyTerminationRequest(BaseModel):
 class ContractConditionUpdate(BaseModel):
     """契約条件変更"""
     contract_id: int = Field(..., description="対象契約ID", examples=[1])
-    new_unit_price: Optional[Decimal] = Field(None, description="新単価", examples=[650000])
-    new_working_hours: Optional[Decimal] = Field(None, description="新標準稼働時間", examples=[180.0])
+    new_unit_price: Optional[float] = Field(None, description="新単価", examples=[650000.0])
+    new_working_hours: Optional[float] = Field(None, description="新標準稼働時間", examples=[180.0])
     new_contract_end_date: Optional[date] = Field(None, description="新契約終了日")
     reason: str = Field(default="クライアント要望", description="変更理由")
     effective_date: Optional[date] = Field(None, description="変更効力発生日")
@@ -75,9 +74,9 @@ class ContractAmendmentCreate(BaseModel):
     effective_end_date: Optional[date] = Field(None, description="修正効力終了日")
     
     # 修正後の契約条件
-    new_unit_price: Optional[Decimal] = Field(None, description="修正後単価")
+    new_unit_price: Optional[float] = Field(None, description="修正後単価")
     new_contract_end_date: Optional[date] = Field(None, description="修正後契約終了日")
-    new_working_hours: Optional[Decimal] = Field(None, description="修正後標準稼働時間")
+    new_working_hours: Optional[float] = Field(None, description="修正後標準稼働時間")
 
 
 class ContractAmendmentApproval(BaseModel):
@@ -119,6 +118,47 @@ class ContractAmendmentResponse(BaseModel):
     client_approved: bool = Field(..., description="クライアント承認")
     company_approved: bool = Field(..., description="自社承認")
     personnel_acknowledged: bool = Field(..., description="人材確認")
+    created_at: datetime = Field(..., description="作成日時")
+
+
+class ContractCalculationRequest(BaseModel):
+    """契約精算計算リクエスト"""
+    actual_hours: float = Field(..., description="実稼働時間", examples=[175.5])
+
+
+class ContractItemCreate(BaseModel):
+    """契約精算項目作成"""
+    item_name: str = Field(..., description="項目名称", examples=["交通費", "住宅手当", "欠勤控除"])
+    item_type: str = Field(..., description="項目種別", examples=["交通費", "手当", "欠勤控除"])
+    amount: float = Field(..., description="金額", examples=[10000.0, 1.5])
+    payment_unit: str = Field(..., description="支払い単位", examples=["円/月", "円/時間", "円/分"])
+    comment: Optional[str] = Field(None, description="備考・詳細説明")
+    is_active: bool = Field(True, description="有効フラグ")
+    sort_order: int = Field(0, description="表示順序")
+
+
+class ContractItemUpdate(BaseModel):
+    """契約精算項目更新"""
+    item_name: Optional[str] = Field(None, description="項目名称")
+    item_type: Optional[str] = Field(None, description="項目種別")
+    amount: Optional[float] = Field(None, description="金額")
+    payment_unit: Optional[str] = Field(None, description="支払い単位")
+    comment: Optional[str] = Field(None, description="備考・詳細説明")
+    is_active: Optional[bool] = Field(None, description="有効フラグ")
+    sort_order: Optional[int] = Field(None, description="表示順序")
+
+
+class ContractItemResponse(BaseModel):
+    """契約精算項目レスポンス"""
+    id: int = Field(..., description="項目ID")
+    item_name: str = Field(..., description="項目名称")
+    item_type: str = Field(..., description="項目種別")
+    amount: float = Field(..., description="金額")
+    payment_unit: str = Field(..., description="支払い単位")
+    comment: Optional[str] = Field(None, description="備考")
+    is_active: bool = Field(..., description="有効フラグ")
+    is_deduction: bool = Field(..., description="控除項目フラグ")
+    sort_order: int = Field(..., description="表示順序")
     created_at: datetime = Field(..., description="作成日時")
 
 

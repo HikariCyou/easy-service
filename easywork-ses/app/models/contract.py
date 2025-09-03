@@ -1,10 +1,11 @@
 from datetime import datetime
-from decimal import Decimal
 
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import ContractStatus, ContractType, ContractChangeType, ContractChangeReason
+from app.models.enums import (
+    ContractStatus, ContractType, ContractChangeType, ContractChangeReason, ContractItemType, PaymentUnit
+)
 
 
 class Contract(BaseModel, TimestampMixin):
@@ -31,31 +32,29 @@ class Contract(BaseModel, TimestampMixin):
     contract_end_date = fields.DateField(description="契約終了日")
 
     # 単価・条件
-    unit_price = fields.DecimalField(max_digits=10, decimal_places=0, description="基本単価（月額）")
+    unit_price = fields.FloatField(description="基本単価（月額）")
 
     # 出勤時間管理（重要な部分）
-    standard_working_hours = fields.DecimalField(
-        max_digits=5, decimal_places=1, default=Decimal("160.0"), description="標準稼働時間/月"
+    standard_working_hours = fields.FloatField(
+        default=160.0, description="標準稼働時間/月"
     )
-    min_working_hours = fields.DecimalField(
-        max_digits=5, decimal_places=1, null=True, description="最低稼働時間/月（下限）"
+    min_working_hours = fields.FloatField(
+        null=True, description="最低稼働時間/月（下限）"
     )
-    max_working_hours = fields.DecimalField(
-        max_digits=5, decimal_places=1, null=True, description="最高稼働時間/月（上限）"
+    max_working_hours = fields.FloatField(
+        null=True, description="最高稼働時間/月（上限）"
     )
 
     # 超過・不足時の処理
-    overtime_rate = fields.FloatField(null=True,default=float("1.00"), description="超過時間単価倍率"
-    )
-    shortage_rate = fields.FloatField(null=True, default=float("1.00"), description="不足時間単価倍率"
-    )
+    overtime_rate = fields.FloatField(null=True, default=1.0, description="超過時間単価倍率")
+    shortage_rate = fields.FloatField(null=True, default=1.0, description="不足時間単価倍率")
 
     # 超過・不足時間の計算基準
     min_guaranteed_hours = fields.FloatField(
         null=True, description="最低保証時間（この時間までは満額支払い）"
     )
-    free_overtime_hours = fields.FloatField(default=float("0.0"), description="無償残業時間（この時間までは追加料金なし）"
-    )
+    free_overtime_hours = fields.FloatField(default=0.0, description="無償残業時間（この時間までは追加料金なし）")
+
 
     # ステータス
     status = fields.CharEnumField(ContractStatus, default=ContractStatus.ACTIVE, description="契約ステータス")
@@ -67,6 +66,7 @@ class Contract(BaseModel, TimestampMixin):
     attendances: fields.ReverseRelation["Attendance"]
     change_histories: fields.ReverseRelation["ContractChangeHistory"]
     amendments: fields.ReverseRelation["ContractAmendment"]
+    calculation_items: fields.ReverseRelation["ContractCalculationItem"]
 
     class Meta:
         table = "ses_contract"
@@ -91,46 +91,86 @@ class Contract(BaseModel, TimestampMixin):
             return self.personnel.name
         return "不明"
 
-    def calculate_monthly_payment(self, actual_hours: Decimal) -> dict:
-        """月額支払い金額を計算"""
+    async def calculate_monthly_payment(self, actual_hours: float) -> dict:
+        """SES月額精算計算（完全版）
+        基本給 + 残業代 - 欠勤控除 + 各種手当
+        """
+        # 時間単価を計算
+        hourly_rate = self.unit_price / self.standard_working_hours
+        
         result = {
-            "base_payment": self.unit_price,
-            "overtime_payment": Decimal("0"),
-            "shortage_deduction": Decimal("0"),
-            "total_payment": self.unit_price,
+            "contract_number": self.contract_number,
             "actual_hours": actual_hours,
-            "details": [],
+            "base_salary": self.unit_price,
+            "overtime_payment": 0.0,
+            "shortage_deduction": 0.0,
+            "allowances": 0.0,
+            "other_deductions": 0.0,
+            "total_payment": 0.0,
+            "calculation_details": [],
+            "item_details": []
         }
 
-        # 最低保証時間がある場合の処理
-        if self.min_guaranteed_hours and actual_hours < self.min_guaranteed_hours:
-            # 最低保証時間までは満額支払い
-            guaranteed_payment = self.unit_price
-            result["details"].append(f"最低保証時間適用: {self.min_guaranteed_hours}h")
-        else:
-            guaranteed_payment = self.unit_price
+        # 1. 基本給（固定）
+        result["calculation_details"].append(f"基本給: {self.unit_price:.0f}円")
 
-        # 上限を超えた場合の超過料金計算
+        # 2. 残業代計算（上限時間を超えた分）
         if self.max_working_hours and actual_hours > self.max_working_hours:
             # 無償残業時間を考慮
-            billable_overtime = actual_hours - self.max_working_hours - self.free_overtime_hours
-            if billable_overtime > 0:
-                hourly_rate = self.unit_price / self.standard_working_hours
-                overtime_payment = hourly_rate * billable_overtime * self.overtime_rate
+            overtime_hours = actual_hours - self.max_working_hours - self.free_overtime_hours
+            if overtime_hours > 0:
+                overtime_payment = overtime_hours * hourly_rate * self.overtime_rate
                 result["overtime_payment"] = overtime_payment
-                result["details"].append(f"超過時間: {billable_overtime}h × {self.overtime_rate}")
+                result["calculation_details"].append(
+                    f"残業代: {overtime_hours}h × {hourly_rate:.2f}円/h × {self.overtime_rate} = {overtime_payment:.0f}円"
+                )
 
-        # 下限を下回った場合の減額計算
+        # 3. 欠勤控除計算（下限時間を下回った分）
         if self.min_working_hours and actual_hours < self.min_working_hours:
+            # 最低保証時間がある場合は考慮
             if not (self.min_guaranteed_hours and actual_hours >= self.min_guaranteed_hours):
                 shortage_hours = self.min_working_hours - actual_hours
-                hourly_rate = self.unit_price / self.standard_working_hours
-                shortage_deduction = hourly_rate * shortage_hours * (Decimal("1.00") - self.shortage_rate)
+                shortage_deduction = shortage_hours * hourly_rate * self.shortage_rate
                 result["shortage_deduction"] = shortage_deduction
-                result["details"].append(f"不足時間: {shortage_hours}h × {1.00 - self.shortage_rate}")
+                result["calculation_details"].append(
+                    f"欠勤控除: {shortage_hours}h × {hourly_rate:.2f}円/h × {self.shortage_rate} = {shortage_deduction:.0f}円"
+                )
 
-        result["total_payment"] = guaranteed_payment + result["overtime_payment"] - result["shortage_deduction"]
+        # 4. 契約項目からの計算（手当・控除項目）
+        calculation_items = await self.calculation_items.filter(is_active=True).all()
+        for item in calculation_items:
+            monthly_amount = item.calculate_monthly_amount(actual_hours, hourly_rate)
+            
+            item_detail = {
+                "id": item.id,
+                "name": item.item_name,
+                "type": item.item_type,
+                "amount": item.amount,
+                "unit": item.payment_unit,
+                "monthly_amount": monthly_amount,
+                "comment": item.comment,
+                "is_deduction": item.is_deduction
+            }
+            result["item_details"].append(item_detail)
+            
+            if item.is_deduction:
+                result["other_deductions"] += monthly_amount
+                result["calculation_details"].append(f"{item.item_name}（控除）: -{monthly_amount:.0f}円 [{item.payment_unit}]")
+            else:
+                result["allowances"] += monthly_amount
+                result["calculation_details"].append(f"{item.item_name}: +{monthly_amount:.0f}円 [{item.payment_unit}]")
+
+        # 5. 合計計算
+        result["total_payment"] = (
+            result["base_salary"] +
+            result["overtime_payment"] +
+            result["allowances"] -
+            result["shortage_deduction"] -
+            result["other_deductions"]
+        )
+
         return result
+
 
     async def record_change(self, change_type: ContractChangeType, change_reason: ContractChangeReason = None, 
                            before_values: dict = None, after_values: dict = None, 
@@ -191,8 +231,8 @@ class Contract(BaseModel, TimestampMixin):
             requested_by=requested_by
         )
 
-    async def update_conditions(self, new_unit_price: Decimal = None, 
-                               new_working_hours: Decimal = None,
+    async def update_conditions(self, new_unit_price: float = None, 
+                               new_working_hours: float = None,
                                reason: ContractChangeReason = ContractChangeReason.CLIENT_REQUEST,
                                effective_date = None, requested_by: str = None):
         """
@@ -299,9 +339,9 @@ class ContractAmendment(BaseModel, TimestampMixin):
     effective_end_date = fields.DateField(null=True, description="修正効力終了日")
     
     # 修正後の契約条件（主要項目のみ）
-    new_unit_price = fields.DecimalField(max_digits=10, decimal_places=0, null=True, description="修正後単価")
+    new_unit_price = fields.FloatField(null=True, description="修正後単価")
     new_contract_end_date = fields.DateField(null=True, description="修正後契約終了日")
-    new_working_hours = fields.DecimalField(max_digits=5, decimal_places=1, null=True, description="修正後標準稼働時間")
+    new_working_hours = fields.FloatField(null=True, description="修正後標準稼働時間")
     
     # 承認・署名情報
     client_approved = fields.BooleanField(default=False, description="クライアント承認")
@@ -357,3 +397,85 @@ class ContractAmendment(BaseModel, TimestampMixin):
 
     def __str__(self):
         return f"{self.amendment_number} - {self.amendment_title}"
+
+
+class ContractCalculationItem(BaseModel, TimestampMixin):
+    """
+    契約精算項目管理
+    1. 名称: 基本給、交通費等
+    2. 金額: 数値
+    3. 単位: 円/月、円/時間、円/分等
+    4. 備考: 詳細説明
+    """
+    
+    # 関連する契約
+    contract = fields.ForeignKeyField("models.Contract", related_name="calculation_items", description="対象契約")
+    
+    # 項目基本情報
+    item_name = fields.CharField(max_length=100, description="項目名称")  # 交通費、住宅手当等
+    item_type = fields.CharEnumField(ContractItemType, description="項目種別")
+    
+    # 金額・単位情報
+    amount = fields.FloatField(description="金額")
+    payment_unit = fields.CharEnumField(PaymentUnit, description="支払い単位")
+    
+    # 詳細情報
+    comment = fields.TextField(null=True, description="備考・詳細説明")
+    
+    # 管理情報
+    is_active = fields.BooleanField(default=True, description="有効フラグ")
+    sort_order = fields.IntField(default=0, description="表示順序")
+    
+    class Meta:
+        table = "ses_contract_calculation_item"
+        table_description = "契約精算項目管理"
+        indexes = [
+            ("contract_id", "item_type"),
+            ("is_active", "sort_order"),
+        ]
+
+    def __str__(self):
+        return f"{self.item_name} - {self.amount}{self.payment_unit}"
+
+    @property
+    def is_deduction(self) -> bool:
+        """控除項目かどうかを判定"""
+        return self.item_type in [
+            ContractItemType.ABSENCE_DEDUCTION,
+            ContractItemType.OTHER_DEDUCTION
+        ]
+
+    def calculate_monthly_amount(self, actual_hours: float = 0, hourly_rate: float = 0) -> float:
+        """月額換算金額を計算
+        
+        Args:
+            actual_hours: 実稼働時間（時間単位の計算時に使用）
+            hourly_rate: 時間単価（時間単位の計算時に使用）
+            
+        Returns:
+            月額換算金額
+        """
+        if self.payment_unit == PaymentUnit.YEN_PER_MONTH:
+            return self.amount
+        elif self.payment_unit == PaymentUnit.TEN_THOUSAND_YEN_PER_MONTH:
+            return self.amount * 10000
+        elif self.payment_unit == PaymentUnit.YEN_PER_HOUR:
+            # 時間単価：実稼働時間 × 金額
+            return actual_hours * self.amount
+        elif self.payment_unit == PaymentUnit.YEN_PER_MINUTE:
+            # 分単価：実稼働時間（分） × 金額
+            return actual_hours * 60 * self.amount
+        elif self.payment_unit == PaymentUnit.YEN_PER_DAY:
+            # 日単価：実稼働日数 × 金額（1日8時間として計算）
+            working_days = actual_hours / 8
+            return working_days * self.amount
+        elif self.payment_unit == PaymentUnit.PERCENTAGE:
+            # パーセンテージ：基本給に対する割合
+            base_salary = hourly_rate * actual_hours if hourly_rate > 0 else 0
+            return base_salary * (self.amount / 100)
+        elif self.payment_unit == PaymentUnit.FIXED_AMOUNT:
+            return self.amount
+        else:
+            return self.amount
+
+
