@@ -78,6 +78,8 @@ class Personnel(BaseModel, TimestampMixin):
     portfolio_url = fields.CharField(max_length=500, null=True, description="作品集URL")
     website_url = fields.CharField(max_length=500, null=True, description="个人网站URL")
     remark = fields.TextField(null=True, description="备注")
+
+    process_instance_id = fields.CharField(max_length=255, null=True, description="工作流实例ID")
     
     # === 关联 ===
     # 特化信息（根据person_type）
@@ -122,11 +124,11 @@ class Personnel(BaseModel, TimestampMixin):
 
     async def get_detail(self):
         if self.person_type == PersonType.EMPLOYEE:
-            return await self.employee_detail.first()
+            return await self.employee_detail if hasattr(self, 'employee_detail') else None
         elif self.person_type == PersonType.FREELANCER:
-            return await self.freelancer_detail.first()
+            return await self.freelancer_detail if hasattr(self, 'freelancer_detail') else None
         elif self.person_type == PersonType.BP_EMPLOYEE:
-            return await self.bp_employee_detail.first()
+            return await self.bp_employee_detail if hasattr(self, 'bp_employee_detail') else None
         return None
 
 
@@ -152,9 +154,7 @@ class EmployeeDetail(BaseModel, TimestampMixin):
         SalaryPaymentType, default=SalaryPaymentType.MONTHLY, null=True, description="给与支给形态"
     )
     salary = fields.IntField(default=0, null=True, description="给与额")
-    
-    # === HR系统固有 ===
-    process_instance_id = fields.CharField(max_length=255, null=True, description="工作流实例ID")
+
 
     class Meta:
         table = "ses_employee_detail"

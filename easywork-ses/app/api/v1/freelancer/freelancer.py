@@ -446,7 +446,7 @@ async def get_freelancer_dashboard(freelancer_id: int = Query(..., description="
             })
         
         # フリーランサー詳細情報取得
-        detail = await freelancer.freelancer_detail.first()
+        detail = await freelancer.freelancer_detail if freelancer.freelancer_detail else None
         business_years = 0.0
         if detail and detail.business_start_date:
             from datetime import date

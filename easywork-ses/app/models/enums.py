@@ -174,6 +174,33 @@ class ContractType(StrEnum):
     FREELANCER = "フリーランス"  # フリーランス
 
 
+class ContractChangeType(StrEnum):
+    """契約変更種別"""
+    CONTRACT_RENEWAL = "契約更新"  # 契約更新
+    EARLY_TERMINATION = "早期解約"  # 早期解約
+    CONDITION_CHANGE = "条件変更"  # 条件変更（単価、時間等）
+    PERIOD_EXTENSION = "期間延長"  # 期間延長
+    PERIOD_SHORTENING = "期間短縮"  # 期間短縮
+    STATUS_CHANGE = "ステータス変更"  # ステータス変更
+    AMENDMENT = "契約修正"  # 契約修正
+    SUSPENSION = "一時停止"  # 一時停止
+    RESUMPTION = "再開"  # 再開
+
+
+class ContractChangeReason(StrEnum):
+    """契約変更理由"""
+    CLIENT_REQUEST = "クライアント要望"  # クライアント要望
+    PERSONNEL_REQUEST = "人材要望"  # 人材要望
+    PROJECT_CHANGE = "プロジェクト変更"  # プロジェクト変更
+    PERFORMANCE_ISSUE = "パフォーマンス問題"  # パフォーマンス問題
+    BUDGET_CHANGE = "予算変更"  # 予算変更
+    SCHEDULE_CHANGE = "スケジュール変更"  # スケジュール変更
+    MARKET_CONDITION = "市場状況"  # 市場状況
+    COMPANY_POLICY = "会社方針"  # 会社方針
+    LEGAL_REQUIREMENT = "法的要件"  # 法的要件
+    OTHER = "その他"  # その他
+
+
 class AttendanceType(StrEnum):
     NORMAL = "通常出勤"  # 通常出勤
     PAID_LEAVE = "有給休暇"  # 有給休暇

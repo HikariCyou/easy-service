@@ -345,8 +345,8 @@ class ImportPersonController:
         # 获取特化信息
         specialized_info = {}
         if personnel.person_type == PersonType.EMPLOYEE:
-            employee_detail = await personnel.employee_detail.first()
-            if employee_detail:
+            if personnel.employee_detail:
+                employee_detail = await personnel.employee_detail
                 specialized_info = {
                     "joining_time": employee_detail.joining_time,
                     "position": employee_detail.position,
@@ -354,8 +354,8 @@ class ImportPersonController:
                     "salary": employee_detail.salary
                 }
         elif personnel.person_type == PersonType.FREELANCER:
-            freelancer_detail = await personnel.freelancer_detail.first()
-            if freelancer_detail:
+            if personnel.freelancer_detail:
+                freelancer_detail = await personnel.freelancer_detail
                 specialized_info = {
                     "business_name": freelancer_detail.business_name,
                     "tax_number": freelancer_detail.tax_number,
@@ -363,8 +363,8 @@ class ImportPersonController:
                     "preferred_work_style": freelancer_detail.preferred_work_style
                 }
         elif personnel.person_type == PersonType.BP_EMPLOYEE:
-            bp_detail = await personnel.bp_employee_detail.first()
-            if bp_detail:
+            if personnel.bp_employee_detail:
+                bp_detail = await personnel.bp_employee_detail
                 bp_company = await bp_detail.bp_company
                 specialized_info = {
                     "bp_company_name": bp_company.name if bp_company else None,

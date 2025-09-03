@@ -78,7 +78,7 @@ class PersonnelController:
             # 詳細情報を分離
             detail_fields = {}
             for field in ['joining_time', 'position', 'employment_type', 'business_content',
-                         'salary_payment_type', 'salary', 'process_instance_id']:
+                         'salary_payment_type', 'salary']:
                 if field in employee_data:
                     detail_fields[field] = employee_data.pop(field)
             
@@ -102,7 +102,7 @@ class PersonnelController:
             # 詳細情報を分離
             detail_fields = {}
             for field in ['joining_time', 'position', 'employment_type', 'business_content',
-                         'salary_payment_type', 'salary', 'process_instance_id']:
+                         'salary_payment_type', 'salary']:
                 if field in employee_data:
                     detail_fields[field] = employee_data.pop(field)
             
@@ -113,13 +113,13 @@ class PersonnelController:
             
             # EmployeeDetail更新
             if detail_fields:
-                detail = await personnel.employee_detail.first()
-                if not detail:
-                    detail_fields['personnel'] = personnel
-                    await EmployeeDetail.create(**clean_dict(detail_fields))
-                else:
+                detail = await EmployeeDetail.filter(personnel=personnel).first()
+                if detail:
                     await detail.update_from_dict(clean_dict(detail_fields))
                     await detail.save()
+                else:
+                    detail_fields['personnel'] = personnel
+                    await EmployeeDetail.create(**clean_dict(detail_fields))
             
             return personnel
 
@@ -215,13 +215,13 @@ class PersonnelController:
             
             # FreelancerDetail更新
             if detail_fields:
-                detail = await personnel.freelancer_detail.first()
-                if not detail:
-                    detail_fields['personnel'] = personnel
-                    await FreelancerDetail.create(**clean_dict(detail_fields))
-                else:
+                detail = await FreelancerDetail.filter(personnel=personnel).first()
+                if detail:
                     await detail.update_from_dict(clean_dict(detail_fields))
                     await detail.save()
+                else:
+                    detail_fields['personnel'] = personnel
+                    await FreelancerDetail.create(**clean_dict(detail_fields))
             
             return personnel
 
@@ -321,13 +321,13 @@ class PersonnelController:
             
             # BPEmployeeDetail更新
             if detail_fields:
-                detail = await personnel.bp_employee_detail.first()
-                if not detail:
-                    detail_fields['personnel'] = personnel
-                    await BPEmployeeDetail.create(**clean_dict(detail_fields))
-                else:
+                detail = await BPEmployeeDetail.filter(personnel=personnel).first()
+                if detail:
                     await detail.update_from_dict(clean_dict(detail_fields))
                     await detail.save()
+                else:
+                    detail_fields['personnel'] = personnel
+                    await BPEmployeeDetail.create(**clean_dict(detail_fields))
             
             return personnel
 
@@ -423,18 +423,18 @@ class PersonnelController:
         if include_details:
             # person_typeに応じて対応するDetail情報を追加
             if personnel.person_type == PersonType.EMPLOYEE:
-                detail = await personnel.employee_detail.first()
-                if detail:
+                if personnel.employee_detail:
+                    detail = await personnel.employee_detail
                     data['employee_detail'] = await detail.to_dict()
             
             elif personnel.person_type == PersonType.FREELANCER:
-                detail = await personnel.freelancer_detail.first()
-                if detail:
+                if personnel.freelancer_detail:
+                    detail = await personnel.freelancer_detail
                     data['freelancer_detail'] = await detail.to_dict()
             
             elif personnel.person_type == PersonType.BP_EMPLOYEE:
-                detail = await personnel.bp_employee_detail.first()
-                if detail:
+                if personnel.bp_employee_detail:
+                    detail = await personnel.bp_employee_detail
                     data['bp_employee_detail'] = await detail.to_dict()
                     # BP会社情報も含める
                     bp_company = await detail.bp_company
