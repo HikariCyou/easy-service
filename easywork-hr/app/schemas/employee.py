@@ -20,7 +20,7 @@ class EmployeeSchema(BaseModel):
 class EmployeeUpdateSchema(BaseModel):
     id: Optional[int] = Field(None, description="従業員ID", example=1)
     user_id: Optional[int] = Field(None, description="関連したユーザーID", example=1)
-    birthday: str = Field(default=None, description="生年月日", example="1990-01-01")
+    birthday: Optional[str] = Field(default=None, description="生年月日", example="1990-01-01")
     code: Optional[str] = Field(None, max_length=20, description="社員番号", example="EMP001")
     joining_time: Optional[str] = Field(None, description="入社時間", example="2020-01-01")
     salary: Optional[int] = Field(default=None, description="給料", examples="100000")

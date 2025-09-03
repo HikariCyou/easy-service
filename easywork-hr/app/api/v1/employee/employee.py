@@ -45,7 +45,7 @@ async  def get_employee_list(
     return Success(data=result, total=total )
 
 
-@router.get("/get", summary="従業員情報を取得")
+@router.get("/info", summary="従業員情報を取得")
 async def get_employee_info(
     employee_id: int = Query(..., description="従業員ID"),
     authorization: str = Header(..., description="token验证")
@@ -142,7 +142,7 @@ async def get_emergency_contact(
     emergency_contact = await EmployeeEmergencyContact.get_or_none(personnel_id=employee_id)
     if emergency_contact:
         return Success(data=await emergency_contact.to_dict())
-    return Fail(msg="緊急連絡先が見つかりません")
+    return Success(data=None)
 
 # 緊急連絡先保存
 @router.post("/emergency_contact/save", summary="緊急連絡先を保存")
@@ -283,13 +283,14 @@ async def save_employee_social_ins_info(
 @router.get("/employment_ins/get", summary="雇用保険情報を取得")
 async def get_employee_employment_ins_info(
     employee_id: Optional[int] = Query(default=None),
-    employee = Depends(get_current_employee)
 ):
     """
     従業員の雇用保険情報を取得
     """
-    if not employee_id:
-        employee_id = employee.id
+    employee = await employee_controller.get_employee_by_id(employee_id)
+    if not employee:
+        return Fail(msg="従業員が見つかりません")
+
     employment_ins_info = await employee_controller.get_employee_employment_ins_info(employee_id=employee_id)
     if employment_ins_info:
         return Success(data=await employment_ins_info.to_dict())

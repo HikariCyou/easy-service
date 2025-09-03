@@ -1,7 +1,7 @@
 from app.core.user_client import user_client
 from app.models import EmployeeAddress
 from app.models.employee import Personnel, EmployeeEmergencyContact, EmployeeBankAccount, EmployeeResidenceStatus, \
-    EmployeePassport, EmployeeSocialInsurance, EmployeeEmploymentInsurance
+    EmployeePassport, EmployeeSocialInsurance, EmployeeEmploymentInsurance, EmployeeDetail
 from app.utils.common import clean_dict
 
 # 为了兼容性，保留Employee别名
@@ -34,6 +34,16 @@ class EmployeeController:
 
         # 基本的な従業員情報
         employee_info['employee'] = await employee.to_dict()
+
+        # 获取并合并employee_detail数据
+        employee_detail = await employee.employee_detail
+        if employee_detail:
+            detail_dict = await employee_detail.to_dict()
+            # 只合并需要的字段，排除id等会冲突的字段
+            exclude_fields = {'id', 'personnel', 'personnel_id', 'created_at', 'updated_at'}
+            for key, value in detail_dict.items():
+                if key not in exclude_fields:
+                    employee_info['employee'][key] = value
         # address info
         employee_address = await EmployeeAddress.get_or_none(personnel_id=employee.id)
         if employee_address:
@@ -134,8 +144,27 @@ class EmployeeController:
         従業員情報を更新
         """
         update_data = employee_data.model_dump(exclude_unset=True)
-        employee.update_from_dict(update_data)
-        await employee.save()
+        
+        # Personnel (基本信息) 更新
+        personnel_fields = ['birthday', 'code']
+        personnel_update = {k: v for k, v in update_data.items() if k in personnel_fields}
+        if personnel_update:
+            employee.update_from_dict(personnel_update)
+            await employee.save()
+        
+        # EmployeeDetail (详细信息) 更新
+        detail_fields = ['joining_time', 'position', 'employment_type', 'business_content', 'salary_payment_type', 'salary']
+        detail_update = {k: v for k, v in update_data.items() if k in detail_fields}
+        
+        if detail_update:
+            employee_detail = await EmployeeDetail.get_or_none(personnel=employee)
+            if employee_detail:
+                employee_detail.update_from_dict(detail_update)
+                await employee_detail.save()
+            else:
+                detail_update['personnel_id'] = employee.id
+                await EmployeeDetail.create(**detail_update)
+        
         return employee
 
     async def save_employee_address_info(self , address_data: EmployeeAddressSchema):

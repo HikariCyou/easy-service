@@ -52,7 +52,7 @@ async def get_current_employee():
     login_user_id = CTX_USER_ID.get()
     employee = await employee_controller.get_employee_by_user_id(login_user_id)
     if not employee:
-        raise HTTPException(status_code=404, detail="従業員が見つかりません")
+        return None
     return employee
 
 DependAuth = Depends(AuthControl.is_authed)
