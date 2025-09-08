@@ -5,6 +5,14 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
+class CaseTerminationSchema(BaseModel):
+    """案件終了リクエスト"""
+    case_id: int = Field(..., description="案件ID")
+    termination_date: Optional[date] = Field(None, description="終了日（未指定の場合は今日）")
+    reason: Optional[str] = Field("案件終了", description="終了理由")
+    terminated_by: Optional[str] = Field(None, description="終了実行者")
+
+
 class AddCaseSchema(BaseModel):
     title: str = Field(..., description="案件タイトル")
     client_company_id: int = Field(..., description="取引先会社ID")

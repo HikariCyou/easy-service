@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
@@ -31,10 +33,88 @@ class Case(BaseModel, TimestampMixin):
     description = fields.TextField(null=True, description="詳細・備考")
 
     candidates: fields.ReverseRelation["CaseCandidate"]
+    contracts: fields.ReverseRelation["Contract"]
 
     class Meta:
         table = "ses_case"
         table_description = "SES案件情報"
+    
+    async def terminate_case(self, termination_date: datetime = None, reason: str = "案件終了", terminated_by: str = None):
+        """
+        案件終了処理：案件を終了し、関連する全契約も終了する
+        """
+        from tortoise.transactions import in_transaction
+        from app.models.enums import CaseStatus, ContractStatus, ContractChangeType, ContractChangeReason
+        
+        if termination_date is None:
+            termination_date = datetime.now().date()
+            
+        async with in_transaction():
+            # 1. 案件ステータスを終了に変更
+            original_status = self.status
+            self.status = CaseStatus.CLOSED
+            self.end_date = termination_date
+            await self.save()
+            
+            # 2. 関連する有効な契約を全て取得
+            active_contracts = await self.contracts.filter(
+                status=ContractStatus.ACTIVE
+            ).prefetch_related('personnel')
+            
+            if not active_contracts:
+                return {"message": "案件を終了しましたが、有効な契約は見つかりませんでした", "terminated_contracts": 0}
+            
+            # 3. 各契約を終了処理
+            terminated_contracts = []
+            for contract in active_contracts:
+                try:
+                    # 契約終了処理
+                    await contract.terminate_early(
+                        reason=ContractChangeReason.PROJECT_CHANGE,
+                        termination_date=termination_date,
+                        requested_by=terminated_by or "システム自動（案件終了）",
+                        description=f"案件終了による契約終了: {reason}"
+                    )
+                    
+                    terminated_contracts.append({
+                        "contract_id": contract.id,
+                        "contract_number": contract.contract_number,
+                        "personnel_name": contract.personnel.name if contract.personnel else "不明",
+                        "original_end_date": contract.contract_end_date.isoformat() if contract.contract_end_date else None,
+                        "new_end_date": termination_date.isoformat()
+                    })
+                    
+                except Exception as e:
+                    # 個別契約の終了に失敗してもログを残して続行
+                    print(f"契約ID {contract.id} の終了処理でエラー: {e}")
+                    continue
+            
+            # 4. 案件変更履歴を記録
+            try:
+                from app.models.case import CaseHistory
+                from app.models.enums import ChangeType
+                
+                await CaseHistory.create(
+                    case=self,
+                    change_type=ChangeType.STATUS_CHANGE,
+                    old_value=original_status,
+                    new_value=CaseStatus.CLOSED,
+                    change_reason=reason,
+                    changed_by=terminated_by or "システム",
+                    description=f"案件終了処理により {len(terminated_contracts)} 件の契約も終了"
+                )
+            except Exception as e:
+                # 履歴記録の失敗は処理を続行
+                print(f"案件履歴記録でエラー: {e}")
+            
+            return {
+                "message": f"案件を終了しました。{len(terminated_contracts)}件の契約も終了されました。",
+                "case_id": self.id,
+                "case_title": self.title,
+                "termination_date": termination_date.isoformat(),
+                "terminated_contracts": len(terminated_contracts),
+                "contract_details": terminated_contracts
+            }
 
 
 class CaseCandidate(BaseModel, TimestampMixin):

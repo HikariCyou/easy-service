@@ -44,19 +44,36 @@ class ClientCompany(BaseModel, TimestampMixin):
 
 class ClientContact(BaseModel, TimestampMixin):
     """
-    顧客会社の担当者情報
+    取り先会社営業担当者
+    取り先会社との商談・営業活動を行う担当者管理
     """
 
     client_company = fields.ForeignKeyField("models.ClientCompany", related_name="contacts", description="所属会社")
+    
+    # 基本情報
     name = fields.CharField(max_length=100, description="担当者名")
     name_kana = fields.CharField(max_length=100, null=True, description="担当者名（フリーカナ）")
-    department = fields.CharField(max_length=100, null=True, description="部署")
-    position = fields.CharField(max_length=100, null=True, description="役職")
+    gender = fields.IntField(null=True, default=0, description="性別 (0:不明, 1:男, 2:女)")
+    
+    # 連絡先情報
     phone = fields.CharField(max_length=50, null=True, description="電話番号")
-    email = fields.CharField(max_length=100, null=True, description="メール")
+    email = fields.CharField(max_length=100, description="メールアドレス")
+    
+    # ステータス
     is_primary = fields.BooleanField(default=False, description="主担当者かどうか")
+    is_active = fields.BooleanField(default=True, description="有効フラグ")
+    
+    # 備考
     remark = fields.TextField(null=True, description="備考")
 
     class Meta:
         table = "ses_client_contact"
-        table_description = "顧客会社担当者"
+        table_description = "顧客会社担当者（営業担当者）"
+        indexes = [
+            ("client_company", "is_active"),
+            ("email",),
+            ("is_primary",),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.client_company.company_name})"

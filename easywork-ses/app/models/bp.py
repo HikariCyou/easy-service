@@ -1,9 +1,10 @@
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import (BPCompanyStatus,
-                              DecimalProcessingType,
-                              EmploymentStatus, MarriageStatus)
+from app.models.enums import (AttendanceCalcType, BPCompanyStatus,
+                              DecimalProcessingPosition, DecimalProcessingType,
+                              EmploymentStatus, MarriageStatus, PaymentDay,
+                              PaymentSite)
 
 
 class BPCompany(BaseModel, TimestampMixin):
@@ -15,7 +16,7 @@ class BPCompany(BaseModel, TimestampMixin):
     free_kana_name = fields.CharField(max_length=255, null=True, description="会社名（フリカナ）")
     representative = fields.CharField(max_length=100, null=True, description="代表者名")
     code = fields.CharField(max_length=50, null=True, description="会社コード", unique=True)
-    tax_number = fields.CharField(max_length=50, null=True, description="法人番号 / 税番号")
+    invoice_number = fields.CharField(max_length=50, null=True, description="インボイス番号")
     # 郵便コード
     zip_code = fields.CharField(max_length=10, null=True, description="郵便コード")
     address = fields.CharField(max_length=255, null=True, description="住所")
@@ -38,14 +39,34 @@ class BPCompany(BaseModel, TimestampMixin):
     contract_start_date = fields.DateField(null=True, description="契約開始日")
     contract_end_date = fields.DateField(null=True, description="契約終了日")
 
-    attendance_calc_type = fields.IntField(default=15, null=True, description="出勤計算区分")
+    # 支払い関連
+    payment_site = fields.CharEnumField(
+        PaymentSite, null=True, description="支払いサイト"
+    )
+    payment_day = fields.CharEnumField(
+        PaymentDay, null=True, description="支払い日"
+    )
+
+    # 出勤計算関連
+    attendance_calc_type = fields.IntEnumField(
+        AttendanceCalcType, null=True, default=AttendanceCalcType.EMPTY.value, description="出勤計算区分"
+    )
     decimal_processing_type = fields.CharEnumField(
-        DecimalProcessingType, default=DecimalProcessingType.ROUND, null=True, description="小数処理区分"
+        DecimalProcessingType, default=DecimalProcessingType.ROUND, null=True, description="端数の処理区分"
+    )
+    decimal_processing_position = fields.CharEnumField(
+        DecimalProcessingPosition, null=True, description="端数の処理位置"
     )
 
     rating = fields.IntField(default=0, description="社内評価（1-5）")
     remark = fields.TextField(null=True, description="備考")
+    
+    # 関連
     employees: fields.ReverseRelation["BPEmployee"]
+    sales_representatives: fields.ReverseRelation["BPSalesRepresentative"]
+    order_email_configs: fields.ReverseRelation["BPOrderEmailConfig"]
+    payment_email_configs: fields.ReverseRelation["BPPaymentEmailConfig"]
+    bank_accounts: fields.ReverseRelation["BankAccount"]
 
     class Meta:
         table = "ses_bp_company"
@@ -205,3 +226,131 @@ class BPEmployeeEvaluation(BaseModel, TimestampMixin):
     class Meta:
         table = "ses_bp_employee_evaluation"
         table_description = "BP員工評価記録"
+
+
+class BPSalesRepresentative(BaseModel, TimestampMixin):
+    """
+    BP会社営業担当者
+    BP会社との商談・営業活動を行う担当者管理
+    """
+
+    # 所属BP会社
+    bp_company = fields.ForeignKeyField("models.BPCompany", related_name="sales_representatives", description="所属BP会社")
+    
+    # 基本情報
+    name = fields.CharField(max_length=100, description="氏名")
+    name_kana = fields.CharField(max_length=100, null=True, description="氏名（フリーカナ）")
+    gender = fields.IntField(null=True, default=0, description="性別 (0:不明, 1:男, 2:女)")
+    
+    # 連絡先情報
+    email = fields.CharField(max_length=100, description="メールアドレス")
+    phone = fields.CharField(max_length=50, null=True, description="電話番号")
+
+    # ステータス
+    is_primary = fields.BooleanField(default=False, description="主担当者かどうか")
+    is_active = fields.BooleanField(default=True, description="有効フラグ")
+    
+    # 備考
+    remark = fields.TextField(null=True, description="備考")
+    
+    # 関連
+    order_email_configs: fields.ReverseRelation["BPOrderEmailConfig"]
+    payment_email_configs: fields.ReverseRelation["BPPaymentEmailConfig"]
+
+    class Meta:
+        table = "ses_bp_sales_representative"
+        table_description = "BP会社営業担当者"
+        indexes = [
+            ("bp_company", "is_active"),
+            ("email",),
+            ("is_primary",),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.bp_company.name})"
+
+
+class BPOrderEmailConfig(BaseModel, TimestampMixin):
+    """
+    BP会社注文書メール送信設定
+    注文書送信時の連絡先設定
+    """
+    
+    # 所属BP会社
+    bp_company = fields.ForeignKeyField("models.BPCompany", related_name="order_email_configs", description="対象BP会社")
+    
+    # 設定基本情報
+    config_name = fields.CharField(max_length=100, description="設定名称")
+    is_default = fields.BooleanField(default=False, description="デフォルト設定かどうか")
+    is_active = fields.BooleanField(default=True, description="有効フラグ")
+    
+    # 送信者（主担当営業）
+    sender_sales_rep = fields.ForeignKeyField(
+        "models.BPSalesRepresentative", 
+        related_name="order_email_configs", 
+        description="送信者（BP営業担当者）"
+    )
+    
+    # CC営業担当者（複数可）
+    cc_sales_reps = fields.ManyToManyField(
+        "models.BPSalesRepresentative",
+        related_name="order_email_cc_configs",
+        description="CC営業担当者"
+    )
+    
+    # 備考
+    remark = fields.TextField(null=True, description="備考")
+
+    class Meta:
+        table = "ses_bp_order_email_config"
+        table_description = "BP会社注文書メール送信設定"
+        indexes = [
+            ("bp_company", "is_active"),
+            ("is_default",),
+        ]
+
+    def __str__(self):
+        return f"{self.bp_company.name} - {self.config_name}"
+
+
+class BPPaymentEmailConfig(BaseModel, TimestampMixin):
+    """
+    BP会社支払通知書メール送信設定
+    支払通知書送信時の連絡先設定
+    """
+    
+    # 所属BP会社
+    bp_company = fields.ForeignKeyField("models.BPCompany", related_name="payment_email_configs", description="対象BP会社")
+    
+    # 設定基本情報
+    config_name = fields.CharField(max_length=100, description="設定名称")
+    is_default = fields.BooleanField(default=False, description="デフォルト設定かどうか")
+    is_active = fields.BooleanField(default=True, description="有効フラグ")
+    
+    # 送信者（主担当営業）
+    sender_sales_rep = fields.ForeignKeyField(
+        "models.BPSalesRepresentative", 
+        related_name="payment_email_configs", 
+        description="送信者（BP営業担当者）"
+    )
+    
+    # CC営業担当者（複数可）
+    cc_sales_reps = fields.ManyToManyField(
+        "models.BPSalesRepresentative",
+        related_name="payment_email_cc_configs",
+        description="CC営業担当者"
+    )
+    
+    # 備考
+    remark = fields.TextField(null=True, description="備考")
+
+    class Meta:
+        table = "ses_bp_payment_email_config"
+        table_description = "BP会社支払通知書メール送信設定"
+        indexes = [
+            ("bp_company", "is_active"),
+            ("is_default",),
+        ]
+
+    def __str__(self):
+        return f"{self.bp_company.name} - {self.config_name}"

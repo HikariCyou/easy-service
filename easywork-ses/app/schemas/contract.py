@@ -4,6 +4,16 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
+# 契約精算項目スキーマ
+class ContractCalculationItemCreate(BaseModel):
+    """契約精算項目作成"""
+    type: str = Field(..., description="項目種別", examples=["BASIC_SALARY", "OVERTIME_FEE", "TRANSPORTATION"])
+    name: str = Field(..., description="項目名称", examples=["基本給", "残業代", "交通費"])
+    amount: float = Field(..., description="金額", examples=[40, 1.5, 10000])
+    unit: str = Field(..., description="支払い単位", examples=["万円/月", "円/時間", "円/月"])
+    comment: Optional[str] = Field(None, description="備考", examples=["月額基本給"])
+
+
 class CreateContract(BaseModel):
     contract_type: str = Field(..., description="契約種別（BP/自社/フリーランス）", examples=["BP", "自社", "フリーランス"])
     case_id: int = Field(..., description="案件ID", examples=[1])
@@ -16,10 +26,10 @@ class CreateContract(BaseModel):
     max_working_hours: Optional[float] = Field(None, description="最高労働時間", examples=["12"])
     overtime_rate: Optional[float] = Field(None, description="残業率", examples=["1.5"])
     shortage_rate: Optional[float] = Field(None, description="不足率", examples=["1.5"])
-    min_guaranteed_hours: Optional[float] = Field(None, description="最低保証時間", examples=["4"])
     free_overtime_hours: Optional[float] = Field(None, description="フリーオーバータイム時間", examples=["2"])
     status: Optional[str] = Field(None, description="契約ステータス", examples=["契約中", "契約解除"])
     remark: Optional[str] = Field(None, description="備考", examples=["契約内容の詳細"])
+    calculation_items: Optional[List[ContractCalculationItemCreate]] = Field(None, description="精算項目リスト")
 
 
 class UpdateContract(CreateContract):
@@ -59,6 +69,7 @@ class ContractConditionUpdate(BaseModel):
     effective_date: Optional[date] = Field(None, description="変更効力発生日")
     requested_by: Optional[str] = Field(None, description="変更申請者")
     description: Optional[str] = Field(None, description="変更内容の詳細")
+    calculation_items: Optional[List[ContractCalculationItemCreate]] = Field(None, description="精算項目リスト")
 
 
 class ContractAmendmentCreate(BaseModel):

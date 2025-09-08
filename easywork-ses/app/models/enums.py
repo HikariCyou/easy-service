@@ -1,4 +1,4 @@
-from enum import Enum, StrEnum
+from enum import Enum, IntEnum, StrEnum
 
 
 class EnumBase(Enum):
@@ -121,16 +121,73 @@ class BPCompanyStatus(StrEnum):
     BLACKLIST = "blacklist"
 
 
-class AttendanceCalcType(StrEnum):
-    DAILY = "日割"  # 日割
-    MONTHLY = "月額"  # 月額
-    HOURLY = "時間単価"  # 時間単価
+class PaymentSite(StrEnum):
+    EMPTY = "未設定"  # 未設定
+    THIS_MONTH = "今月"  # 今月
+    NEXT_MONTH = "翌月"  # 次月
+    TWO_MONTHS_LATER = "翌々月"  # 次次月
+    THREE_MONTHS = "3月"  # 3月
+    FOUR_MONTHS = "4月"  # 4月
+    FIVE_MONTHS = "5月"  # 5月
+    SIX_MONTHS = "6月"  # 6月
+
+
+class PaymentDay(StrEnum):
+    EMPTY = "未設定"  # 未設定
+    DAY_1 = "1"
+    DAY_2 = "2"
+    DAY_3 = "3"
+    DAY_4 = "4"
+    DAY_5 = "5"
+    DAY_6 = "6"
+    DAY_7 = "7"
+    DAY_8 = "8"
+    DAY_9 = "9"
+    DAY_10 = "10"
+    DAY_11 = "11"
+    DAY_12 = "12"
+    DAY_13 = "13"
+    DAY_14 = "14"
+    DAY_15 = "15"
+    DAY_16 = "16"
+    DAY_17 = "17"
+    DAY_18 = "18"
+    DAY_19 = "19"
+    DAY_20 = "20"
+    DAY_21 = "21"
+    DAY_22 = "22"
+    DAY_23 = "23"
+    DAY_24 = "24"
+    DAY_25 = "25"
+    DAY_26 = "26"
+    DAY_27 = "27"
+    DAY_28 = "28"
+    DAY_29 = "29"
+    DAY_30 = "30"
+    END_OF_MONTH = "月末"  # 月末
+
+
+class AttendanceCalcType(IntEnum):
+    EMPTY = 0  # 未設定
+    FIFTEEN_MINUTES = 15  # 15分ごと
+    THIRTY_MINUTES = 30  # 30分ごと
+    ONE_HOUR = 60  # 1時間ごと
+    SIX_MINUTES = 6  # 6分ごと
 
 
 class DecimalProcessingType(StrEnum):
+    EMPTY = ""  # 未設定
     ROUND = "四捨五入"  # 四捨五入
     FLOOR = "切り捨て"  # 切り捨て
     CEIL = "切り上げ"  # 切り上げ
+
+
+class DecimalProcessingPosition(StrEnum):
+    EMPTY = ""  # 未設定
+    ALL_DECIMAL = "小数全て"  # 小数全て
+    ONE_DIGIT = "1桁まで"  # 1桁まで
+    TWO_DIGITS = "2桁まで"  # 2桁まで
+    THREE_DIGITS = "3桁まで"  # 3桁まで
 
 
 # 必要なenumの定義例
@@ -206,11 +263,11 @@ class ContractItemType(StrEnum):
     BASIC_SALARY = "基本給"  # 基本給
     OVERTIME_FEE = "残業代"  # 残業代
     ABSENCE_DEDUCTION = "欠勤控除"  # 欠勤控除
-    BONUS = "賞与"  # 賞与
     ALLOWANCE = "手当"  # 手当
+    OTHER_FEE = "その他費用"  # その他費用
+    BONUS = "賞与"  # 賞与
     TRANSPORTATION = "交通費"  # 交通費
     WELFARE = "福利厚生費"  # 福利厚生費
-    OTHER_FEE = "その他費用"  # その他費用
     OTHER_DEDUCTION = "その他控除"  # その他控除
 
 

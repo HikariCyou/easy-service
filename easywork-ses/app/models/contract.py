@@ -50,9 +50,6 @@ class Contract(BaseModel, TimestampMixin):
     shortage_rate = fields.FloatField(null=True, default=1.0, description="不足時間単価倍率")
 
     # 超過・不足時間の計算基準
-    min_guaranteed_hours = fields.FloatField(
-        null=True, description="最低保証時間（この時間までは満額支払い）"
-    )
     free_overtime_hours = fields.FloatField(default=0.0, description="無償残業時間（この時間までは追加料金なし）")
 
 
@@ -127,14 +124,13 @@ class Contract(BaseModel, TimestampMixin):
 
         # 3. 欠勤控除計算（下限時間を下回った分）
         if self.min_working_hours and actual_hours < self.min_working_hours:
-            # 最低保証時間がある場合は考慮
-            if not (self.min_guaranteed_hours and actual_hours >= self.min_guaranteed_hours):
-                shortage_hours = self.min_working_hours - actual_hours
-                shortage_deduction = shortage_hours * hourly_rate * self.shortage_rate
-                result["shortage_deduction"] = shortage_deduction
-                result["calculation_details"].append(
-                    f"欠勤控除: {shortage_hours}h × {hourly_rate:.2f}円/h × {self.shortage_rate} = {shortage_deduction:.0f}円"
-                )
+            # 最低労働時間を下回る場合は不足分を控除
+            shortage_hours = self.min_working_hours - actual_hours
+            shortage_deduction = shortage_hours * hourly_rate * self.shortage_rate
+            result["shortage_deduction"] = shortage_deduction
+            result["calculation_details"].append(
+                f"欠勤控除: {shortage_hours}h × {hourly_rate:.2f}円/h × {self.shortage_rate} = {shortage_deduction:.0f}円"
+            )
 
         # 4. 契約項目からの計算（手当・控除項目）
         calculation_items = await self.calculation_items.filter(is_active=True).all()

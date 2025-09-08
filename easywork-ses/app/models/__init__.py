@@ -8,3 +8,4 @@ from .evaluation import *
 from .personnel import *
 from .skill import *
 from .storage import *
+from .bank import *

@@ -5,7 +5,8 @@ from fastapi import APIRouter, Query
 from app.controllers.case import case_candidate_controller, case_controller
 from app.schemas import Fail, Success
 from app.schemas.case import (AddCaseCandidateSchema, AddCaseSchema,
-                              UpdateCaseCandidateSchema, UpdateCaseSchema)
+                              UpdateCaseCandidateSchema, UpdateCaseSchema,
+                              CaseTerminationSchema)
 
 router = APIRouter()
 
@@ -122,5 +123,22 @@ async def delete_candidate(id: int = Query(..., description="候補者ID")):
     try:
         await case_candidate_controller.delete_candidate(candidate_id=id)
         return Success()
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/terminate", summary="案件終了")
+async def terminate_case(termination_data: CaseTerminationSchema):
+    try:
+        case = await case_controller.get_case_by_id(case_id=termination_data.case_id)
+        if not case:
+            return Fail(msg="案件が見つかりませんでした")
+        
+        result = await case.terminate_case(
+            termination_date=termination_data.termination_date,
+            reason=termination_data.reason,
+            terminated_by=termination_data.terminated_by
+        )
+        return Success(data=result)
     except Exception as e:
         return Fail(msg=str(e))

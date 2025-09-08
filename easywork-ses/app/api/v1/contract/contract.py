@@ -104,42 +104,11 @@ async def terminate_contract_early(data: EarlyTerminationRequest):
 
 @router.post("/update-conditions", summary="契約条件変更")
 async def update_contract_conditions(data: ContractConditionUpdate):
-    """契約条件の変更処理"""
+    """契約条件の変更処理（精算項目も含む）"""
     try:
-        from app.models.contract import Contract
-        from app.models.enums import ContractChangeReason
-        
-        # 契約を取得
-        contract = await Contract.get_or_none(id=data.contract_id)
-        if not contract:
-            return Fail(msg="契約が見つかりません")
-            
-        # 変更理由をEnumに変換
-        reason_mapping = {
-            "クライアント要望": ContractChangeReason.CLIENT_REQUEST,
-            "人材要望": ContractChangeReason.PERSONNEL_REQUEST,
-            "プロジェクト変更": ContractChangeReason.PROJECT_CHANGE,
-            "予算変更": ContractChangeReason.BUDGET_CHANGE,
-            "市場状況": ContractChangeReason.MARKET_CONDITION,
-            "その他": ContractChangeReason.OTHER
-        }
-        reason_enum = reason_mapping.get(data.reason, ContractChangeReason.CLIENT_REQUEST)
-        
-        # 契約期間の変更処理
-        if data.new_contract_end_date:
-            contract.contract_end_date = data.new_contract_end_date
-            await contract.save()
-        
-        # 契約条件変更処理を実行
-        await contract.update_conditions(
-            new_unit_price=data.new_unit_price,
-            new_working_hours=data.new_working_hours,
-            reason=reason_enum,
-            effective_date=data.effective_date,
-            requested_by=data.requested_by
-        )
-        
-        return Success(msg="契約条件の変更が完了しました")
+        contract = await contract_controller.update_contract_conditions(data)
+        result = await contract_controller.contract_to_dict(contract, include_relations=True)
+        return Success(data=result, msg="契約条件の変更が完了しました")
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -181,6 +150,26 @@ async def get_contract_history(contract_id: int, limit: int = Query(10, ge=1, le
                 "approval_date": history.approval_date,
                 "created_at": history.created_at
             })
+        
+        return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/{contract_id}/calculation-items", summary="契約精算項目取得")
+async def get_contract_calculation_items(contract_id: int):
+    """契約の精算項目一覧を取得"""
+    try:
+        from app.models.contract import Contract, ContractCalculationItem
+        
+        # 契約を取得
+        contract = await Contract.get_or_none(id=contract_id)
+        if not contract:
+            return Fail(msg="契約が見つかりません")
+            
+        # 精算項目を取得
+        calculation_items = await ContractCalculationItem.filter(contract=contract).order_by('sort_order')
+        data = [await item.to_dict() for item in calculation_items]
         
         return Success(data=data)
     except Exception as e:

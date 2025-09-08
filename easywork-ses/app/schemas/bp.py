@@ -9,7 +9,7 @@ class AddBPCompanySchema(BaseModel):
     free_kana_name: Optional[str] = Field(None, description="協力会社名（フリーカナ）")
     representative: Optional[str] = Field(None, description="代表者名")
     code: Optional[str] = Field(None, description="会社コード")
-    tax_number: Optional[str] = Field(None, description="法人番号 / 税番号")
+    invoice_number: Optional[str] = Field(None, description="インボイス番号")
     zip_code: Optional[str] = Field(None, description="郵便番号")
     address: Optional[str] = Field(None, description="住所")
     phone: Optional[str] = Field(None, description="電話番号")
@@ -18,8 +18,11 @@ class AddBPCompanySchema(BaseModel):
     status: Optional[str] = Field(None, description="ステータス（active/inactive/blacklist）")
     contract_start_date: Optional[date] = Field(None, description="契約開始日")
     contract_end_date: Optional[date] = Field(None, description="契約終了日")
-    attendance_calc_type: Optional[str | int] = Field(None, description="出勤計算区分")
-    decimal_processing_type: Optional[str] = Field(None, description="小数処理区分")
+    payment_site: Optional[str] = Field(None, description="支払いサイト")
+    payment_day: Optional[str] = Field(None, description="支払い日")
+    attendance_calc_type: Optional[int] = Field(None, description="出勤計算区分")
+    decimal_processing_type: Optional[str] = Field(None, description="端数の処理区分")
+    decimal_processing_position: Optional[str] = Field(None, description="端数の処理位置")
     capital: Optional[str] = Field(None, description="資本金")
     established_date: Optional[date] = Field(None, description="設立月日")
     rating: Optional[int] = Field(None, description="社内評価（1-5）")
@@ -32,7 +35,7 @@ class UpdateBPCompanySchema(BaseModel):
     free_kana_name: Optional[str] = Field(None, description="協力会社名（フリーカナ）")
     representative: Optional[str] = Field(None, description="代表者名")
     code: Optional[str] = Field(None, description="会社コード")
-    tax_number: Optional[str] = Field(None, description="法人番号 / 税番号")
+    invoice_number: Optional[str] = Field(None, description="インボイス番号")
     zip_code: Optional[str] = Field(None, description="郵便番号")
     address: Optional[str] = Field(None, description="住所")
     phone: Optional[str] = Field(None, description="電話番号")
@@ -41,10 +44,13 @@ class UpdateBPCompanySchema(BaseModel):
     status: Optional[str] = Field(None, description="ステータス（active/inactive/blacklist）")
     contract_start_date: Optional[date] = Field(None, description="契約開始日")
     contract_end_date: Optional[date] = Field(None, description="契約終了日")
+    payment_site: Optional[str] = Field(None, description="支払いサイト")
+    payment_day: Optional[str] = Field(None, description="支払い日")
     capital: Optional[str] = Field(None, description="資本金")
     established_date: Optional[date] = Field(None, description="設立月日")
-    attendance_calc_type: Optional[str | int] = Field(None, description="出勤計算区分")
-    decimal_processing_type: Optional[str] = Field(None, description="小数処理区分")
+    attendance_calc_type: Optional[int] = Field(None, description="出勤計算区分")
+    decimal_processing_type: Optional[str] = Field(None, description="端数の処理区分")
+    decimal_processing_position: Optional[str] = Field(None, description="端数の処理位置")
     rating: Optional[int] = Field(None, description="社内評価（1-5）")
     remark: Optional[str] = Field(None, description="備考")
 
@@ -103,3 +109,67 @@ class AddBPEmployeeSchema(BaseModel):
 
 class UpdateBPEmployeeSchema(AddBPEmployeeSchema):
     id: Optional[int] = Field(None, description="顧客会社ID")
+
+
+class AddBPSalesRepresentativeSchema(BaseModel):
+    bp_company_id: int = Field(..., description="所属BP会社ID")
+    name: str = Field(..., description="氏名")
+    name_kana: Optional[str] = Field(None, description="氏名（フリーカナ）")
+    gender: Optional[int] = Field(0, description="性別 (0:不明, 1:男, 2:女)")
+    email: str = Field(..., description="メールアドレス")
+    phone: Optional[str] = Field(None, description="電話番号")
+    is_primary: bool = Field(False, description="主担当者かどうか")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class UpdateBPSalesRepresentativeSchema(BaseModel):
+    id: int = Field(..., description="営業担当者ID")
+    bp_company_id: Optional[int] = Field(None, description="所属BP会社ID")
+    name: Optional[str] = Field(None, description="氏名")
+    name_kana: Optional[str] = Field(None, description="氏名（フリーカナ）")
+    gender: Optional[int] = Field(None, description="性別 (0:不明, 1:男, 2:女)")
+    email: Optional[str] = Field(None, description="メールアドレス")
+    phone: Optional[str] = Field(None, description="電話番号")
+    is_primary: Optional[bool] = Field(None, description="主担当者かどうか")
+    is_active: Optional[bool] = Field(None, description="有効フラグ")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class AddBPOrderEmailConfigSchema(BaseModel):
+    bp_company_id: int = Field(..., description="対象BP会社ID")
+    config_name: str = Field(..., description="設定名称")
+    is_default: bool = Field(False, description="デフォルト設定かどうか")
+    sender_sales_rep_id: int = Field(..., description="送信者（BP営業担当者ID）")
+    cc_sales_rep_ids: Optional[list[int]] = Field(None, description="CC営業担当者IDs")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class UpdateBPOrderEmailConfigSchema(BaseModel):
+    id: int = Field(..., description="設定ID")
+    bp_company_id: Optional[int] = Field(None, description="対象BP会社ID")
+    config_name: Optional[str] = Field(None, description="設定名称")
+    is_default: Optional[bool] = Field(None, description="デフォルト設定かどうか")
+    is_active: Optional[bool] = Field(None, description="有効フラグ")
+    sender_sales_rep_id: Optional[int] = Field(None, description="送信者（BP営業担当者ID）")
+    cc_sales_rep_ids: Optional[list[int]] = Field(None, description="CC営業担当者IDs")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class AddBPPaymentEmailConfigSchema(BaseModel):
+    bp_company_id: int = Field(..., description="対象BP会社ID")
+    config_name: str = Field(..., description="設定名称")
+    is_default: bool = Field(False, description="デフォルト設定かどうか")
+    sender_sales_rep_id: int = Field(..., description="送信者（BP営業担当者ID）")
+    cc_sales_rep_ids: Optional[list[int]] = Field(None, description="CC営業担当者IDs")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class UpdateBPPaymentEmailConfigSchema(BaseModel):
+    id: int = Field(..., description="設定ID")
+    bp_company_id: Optional[int] = Field(None, description="対象BP会社ID")
+    config_name: Optional[str] = Field(None, description="設定名称")
+    is_default: Optional[bool] = Field(None, description="デフォルト設定かどうか")
+    is_active: Optional[bool] = Field(None, description="有効フラグ")
+    sender_sales_rep_id: Optional[int] = Field(None, description="送信者（BP営業担当者ID）")
+    cc_sales_rep_ids: Optional[list[int]] = Field(None, description="CC営業担当者IDs")
+    remark: Optional[str] = Field(None, description="備考")

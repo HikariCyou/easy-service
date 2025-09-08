@@ -1256,9 +1256,10 @@ class AttendanceController:
         df = pd.DataFrame(data_rows,
                           columns=['日付', '曜日', '開始時刻', '退勤時刻', '昼休憩', '夜休憩', '作業時間', '出勤区分', '備考'])
 
-        # 4. 写入 Excel带美化格式
+        # 写入 Excel带美化格式
         from openpyxl.styles import Border, Side, PatternFill, Font, Alignment
         from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.page import PageMargins
         
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -1277,7 +1278,9 @@ class AttendanceController:
             header_fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
             header_font = Font(color='FFFFFF', bold=True, size=11)
             
-            # 日本式主标题（更简洁）
+            # 定义填充样式（移到前面）
+            white_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=9)
             title_cell = ws.cell(row=1, column=1, value=f"{title_month}月 勤怠表")
             title_cell.font = Font(size=14, bold=True)
@@ -1330,8 +1333,17 @@ class AttendanceController:
                     
             ws.row_dimensions[3].height = 22
             ws.row_dimensions[4].height = 22
+            
+            # 案件名下方的空白行（第5-7行）- 合并单元格样式
+            for empty_row in [2, 5, 6, 7]:
+                # 合并整行为一个单元格
+                ws.merge_cells(start_row=empty_row, start_column=1, end_row=empty_row, end_column=9)
+                merged_cell = ws.cell(row=empty_row, column=1)
+                merged_cell.fill = white_fill
+                merged_cell.border = Border()  # 无边框
+                ws.row_dimensions[empty_row].height = 18
 
-            # 日本式表头（双线边框）
+            # 表头（双线边框）
             thick_border = Border(
                 left=Side(style='medium'),
                 right=Side(style='medium'),
@@ -1350,34 +1362,75 @@ class AttendanceController:
             
             # 数据行（细边框，交替背景）
             light_fill = PatternFill(start_color='F8F8F8', end_color='F8F8F8', fill_type='solid')
+            white_fill = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+            
+            # 检查哪些行完全没有数据（空行）
+            empty_rows = []
+            for row_idx, row_data in enumerate(data_rows):
+                # 检查除了日期和曜日以外的列是否都为空
+                if all(str(row_data[col_idx]).strip() == "" for col_idx in range(2, len(row_data))):
+                    empty_rows.append(row_idx + 9)  # Excel行从9开始（第8行是表头）
             
             for row in range(9, 9 + len(data_rows)):
                 ws.row_dimensions[row].height = 18
                 # 偶数行添加浅色背景
                 is_even_row = (row - 9) % 2 == 1
+                row_data_index = row - 9
                 
                 for col in range(1, 10):
                     cell = ws.cell(row=row, column=col)
-                    cell.border = thin_border
-                    cell.alignment = Alignment(horizontal='center', vertical='center')
-                    cell.font = Font(size=9)
                     
-                    if is_even_row:
-                        cell.fill = light_fill
-                    
-                    # 特殊列的对齐方式
-                    if col == 9:  # 备注列左对齐
-                        cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-                    elif col == 8:  # 出勤区分列小字体
-                        cell.font = Font(size=8)
+                    # 空行的特殊处理：无边框，纯白背景
+                    if row in empty_rows:
+                        cell.border = Border()  # 无边框
+                        cell.fill = white_fill
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                        cell.font = Font(size=9)
+                    else:
+                        # 正常行的处理
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                        cell.font = Font(size=9)
                         
-            # 日本式Excel列宽设置
-            column_widths = [6, 4, 8, 8, 6, 6, 8, 10, 25]  # 更紧凑的列宽
+                        if is_even_row:
+                            cell.fill = light_fill
+                        
+                        # 特殊列的对齐方式
+                        if col == 9:  # 备注列左对齐
+                            cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+                        elif col == 8:  # 出勤区分列小字体
+                            cell.font = Font(size=8)
+                        
+            # A4纸张打印优化的列宽设置
+            column_widths = [5.5, 3.5, 7, 7, 5, 5, 7, 8.5, 20]  # A4适配列宽
             for i, width in enumerate(column_widths, 1):
                 ws.column_dimensions[get_column_letter(i)].width = width
+            
+            # A4打印设置
+            ws.page_setup.paperSize = ws.PAPERSIZE_A4
+            ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT  # 纵向
+            ws.page_margins.left = 0.5
+            ws.page_margins.right = 0.5
+            ws.page_margins.top = 0.75
+            ws.page_margins.bottom = 0.75
+            ws.page_margins.header = 0.3
+            ws.page_margins.footer = 0.3
+            
+            # 打印缩放和适配设置
+            ws.page_setup.fitToWidth = 1  # 适合一页宽度
+            ws.page_setup.fitToHeight = 0  # 高度不限制，允许多页
+            ws.print_options.horizontalCentered = True  # 水平居中
 
             # 美化的汇总区域（左右分布式布局）
             summary_row = 9 + len(data_rows) + 2  # 空一行
+            
+            # 合计上方的两个固定空白行 - 合并单元格样式
+            for empty_row in [summary_row - 2, summary_row - 1]:
+                ws.merge_cells(start_row=empty_row, start_column=1, end_row=empty_row, end_column=9)
+                empty_summary_cell = ws.cell(row=empty_row, column=1)
+                empty_summary_cell.fill = white_fill
+                empty_summary_cell.border = Border()  # 无边框
+                ws.row_dimensions[empty_row].height = 18
             summary_fill = PatternFill(start_color='F0F0F0', end_color='F0F0F0', fill_type='solid')
             summary_font = Font(bold=True, size=11)
             
