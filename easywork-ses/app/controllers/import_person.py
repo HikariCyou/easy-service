@@ -28,7 +28,7 @@ class ImportPersonController:
     async def get_staff(self, person_id: int):
         """获取要员基本信息"""
         personnel = await Personnel.get_or_none(id=person_id).prefetch_related(
-            'skills', 'contracts', 'contracts__case'
+            'skills__skill', 'contracts', 'contracts__case'
         )
         if not personnel:
             return None
@@ -108,7 +108,7 @@ class ImportPersonController:
 
         # 获取数据
         personnel_list = await Personnel.filter(query).prefetch_related(
-            'skills', 'contracts', 'contracts__case'
+            'skills__skill', 'contracts', 'contracts__case'
         ).order_by(order_by).limit(page_size).offset((page - 1) * page_size).all()
 
         # 转换为schema
@@ -125,7 +125,7 @@ class ImportPersonController:
     async def get_staff_detail(self, person_id: int) -> Optional[ImportPersonDetailSchema]:
         """获取要员详细信息"""
         personnel = await Personnel.get_or_none(id=person_id).prefetch_related(
-            'skills', 'contracts', 'contracts__case',
+            'skills__skill', 'contracts', 'contracts__case',
             'employee_detail', 'freelancer_detail', 'bp_employee_detail'
         )
         if not personnel:
@@ -288,14 +288,18 @@ class ImportPersonController:
         # 字段名映射
         dict_data['type'] = dict_data.get('person_type', '')
         
-        # 简单获取关联数据
-        skills = await personnel.skills.all()
-        if skills:
-            dict_data['skills'] = [await skill.to_dict() for skill in skills]
-        else:
-            dict_data['skills'] = []
+        # 获取技能数据
+        skills_data = []
+        for personnel_skill in personnel.skills:
+            personnel_skill_dict = await personnel_skill.to_dict()
+            skill_dict = await personnel_skill.skill.to_dict()
+            # 重命名skill的字段避免id冲突
+            skill_dict = {f"skill_{k}": v for k, v in skill_dict.items()}
+            skill_data = {**personnel_skill_dict, **skill_dict}
+            skills_data.append(skill_data)
+        dict_data['skills'] = skills_data
             
-        # 获取契约数据
+        # 获取契约数据（已经通过prefetch_related预加载）
         contracts = await personnel.contracts.all()
         
         if contracts:

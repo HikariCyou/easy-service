@@ -131,6 +131,52 @@ class Personnel(BaseModel, TimestampMixin):
             return await self.bp_employee_detail if hasattr(self, 'bp_employee_detail') else None
         return None
 
+    async def update_employment_status_to_working(self, project_end_date=None):
+        """契約開始時に稼働状態を「稼働中」に更新"""
+        self.employment_status = EmploymentStatus.WORKING
+        if project_end_date:
+            self.current_project_end_date = project_end_date
+        await self.save()
+
+    async def update_employment_status_to_available(self):
+        """契約終了時に稼働状態を「稼働可能」に更新"""
+        self.employment_status = EmploymentStatus.AVAILABLE
+        self.current_project_end_date = None
+        await self.save()
+
+    async def update_employment_status_to_vacation(self):
+        """休暇中に状態を更新"""
+        self.employment_status = EmploymentStatus.VACATION
+        await self.save()
+
+    async def update_employment_status_to_unavailable(self, reason: str = None):
+        """稼働不可に状態を更新"""
+        self.employment_status = EmploymentStatus.UNAVAILABLE
+        if reason:
+            self.remark = f"{self.remark or ''}\n稼働不可理由: {reason}".strip()
+        await self.save()
+
+    async def check_and_update_status_by_contracts(self):
+        """契約状況に基づいて稼働状態を自動更新"""
+        from datetime import date
+        from app.models.enums import ContractStatus
+        
+        # 現在有効な契約があるかチェック
+        active_contracts = await self.contracts.filter(
+            status=ContractStatus.ACTIVE,
+            contract_start_date__lte=date.today(),
+            contract_end_date__gte=date.today()
+        ).count()
+        
+        if active_contracts > 0:
+            # 有効な契約がある場合は「稼働中」
+            if self.employment_status != EmploymentStatus.WORKING:
+                await self.update_employment_status_to_working()
+        else:
+            # 有効な契約がない場合は「稼働可能」（退職・稼働不可でない限り）
+            if self.employment_status == EmploymentStatus.WORKING:
+                await self.update_employment_status_to_available()
+
 
 class EmployeeDetail(BaseModel, TimestampMixin):
     """自社员工特化信息"""

@@ -19,7 +19,7 @@ router = APIRouter()
 @router.get("/list", summary="契約一覧取得")
 async def get_contract_list(
     keyword: Optional[str] = Query(None, max_length=50),
-    personnel_id: Optional[int] = Query(None, ge=1, description="要員ID"),
+    staff_id: Optional[int] = Query(None, ge=1, description="要員ID"),
     page: Optional[int] = Query(1, ge=1),
     pageSize: Optional[int] = Query(10, ge=1, le=100),
     case_id: Optional[int] = Query(None, ge=1)
@@ -28,8 +28,8 @@ async def get_contract_list(
         q = Q()
         if keyword:
             q &= Q(contract_number__icontains=keyword) | Q(case__title__icontains=keyword)
-        if personnel_id:
-            q &= Q(personnel_id=personnel_id)
+        if staff_id:
+            q &= Q(personnel_id=staff_id)
         if case_id:
             q &= Q(case_id=case_id)
 

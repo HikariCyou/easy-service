@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from tortoise import fields
+from tortoise.signals import post_save, post_delete
 
 from app.models.base import BaseModel, TimestampMixin
 from app.models.enums import (
@@ -210,6 +211,10 @@ class Contract(BaseModel, TimestampMixin):
         self.status = ContractStatus.TERMINATED
         self.contract_end_date = termination_date
         await self.save()
+        
+        # 人材の稼働状態を自動更新
+        if self.personnel:
+            await self.personnel.check_and_update_status_by_contracts()
         
         after_values = {
             "status": self.status,
@@ -473,5 +478,20 @@ class ContractCalculationItem(BaseModel, TimestampMixin):
             return self.amount
         else:
             return self.amount
+
+
+# Contract信号处理：自动更新Personnel的稼働状态
+@post_save(Contract)
+async def contract_post_save(sender, instance, created, **kwargs):
+    """契約保存後に人材の稼働状態を自動更新"""
+    if instance.personnel:
+        await instance.personnel.check_and_update_status_by_contracts()
+
+
+@post_delete(Contract) 
+async def contract_post_delete(sender, instance, **kwargs):
+    """契約削除後に人材の稼働状態を自動更新"""
+    if instance.personnel:
+        await instance.personnel.check_and_update_status_by_contracts()
 
 

@@ -198,6 +198,10 @@ class ContractController:
             # 精算項目の処理
             if contract_data.calculation_items:
                 await self._handle_calculation_items(contract, contract_data.calculation_items)
+            
+            # 人材の稼働状態を自動更新（契約作成時）
+            if contract.personnel:
+                await contract.personnel.update_employment_status_to_working(contract.contract_end_date)
                 
             return contract
 
@@ -216,6 +220,10 @@ class ContractController:
             # 精算項目の処理
             if contract_data.calculation_items is not None:
                 await self._handle_calculation_items(contract, contract_data.calculation_items)
+            
+            # 人材の稼働状態を自動更新（契約更新時）
+            if contract.personnel:
+                await contract.personnel.check_and_update_status_by_contracts()
                 
             return contract
 
