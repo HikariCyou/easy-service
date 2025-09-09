@@ -371,3 +371,21 @@ class WeeklyMoodStatus(StrEnum):
 
 # MonthlySubmissionStatus 已合并到 ApproveStatus，不再单独定义
 
+
+class BPContractStatus(StrEnum):
+    """BP会社契約ステータス"""
+    DRAFT = "草案"  # 草案
+    ACTIVE = "有効"  # 有効
+    SUSPENDED = "一時停止"  # 一時停止
+    TERMINATED = "終了"  # 終了
+    EXPIRED = "期限切れ"  # 期限切れ
+
+
+class SESContractForm(StrEnum):
+    """SES契約形態"""
+    GYOMU_ITAKU = "業務委託"  # 業務委託
+    HAN_ITAKU = "半委託"  # 半委託
+    HAKEN = "派遣"  # 派遣
+    IKKATSU = "一括"  # 一括
+    OTHER = "その他"  # その他
+

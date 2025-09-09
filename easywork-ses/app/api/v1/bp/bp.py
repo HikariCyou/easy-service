@@ -15,7 +15,9 @@ from app.schemas.bp import (
     AddBPOrderEmailConfigSchema,
     UpdateBPOrderEmailConfigSchema,
     AddBPPaymentEmailConfigSchema,
-    UpdateBPPaymentEmailConfigSchema
+    UpdateBPPaymentEmailConfigSchema,
+    AddBPCompanyContractSchema,
+    UpdateBPCompanyContractSchema
 )
 
 router = APIRouter()
@@ -285,3 +287,84 @@ async def add_payment_email_config(config_data: AddBPPaymentEmailConfigSchema):
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
+
+
+# ==================== BP会社契約関連のAPI ====================
+
+@router.get("/contract/list", summary="BP会社契約一覧取得")
+async def get_bp_contract_list(
+    bp_company_id: Optional[int] = Query(None, description="BP会社ID"),
+    page: Optional[int] = Query(1, ge=1),
+    pageSize: Optional[int] = Query(10, ge=1, le=100),
+    status: Optional[str] = Query(None, description="契約ステータス"),
+    contract_form: Optional[str] = Query(None, description="契約形態"),
+):
+    try:
+        data, total = await bp_controller.get_bp_contracts_with_filters(
+            page=page, 
+            page_size=pageSize, 
+            bp_company_id=bp_company_id,
+            status=status,
+            contract_form=contract_form
+        )
+        return Success(data=data, total=total)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/contract/get", summary="BP会社契約詳細取得")
+async def get_bp_contract(id: int = Query(..., description="契約ID")):
+    try:
+        data = await bp_controller.get_bp_contract_dict_by_id(contract_id=id)
+        if data:
+            return Success(data=data)
+        else:
+            return Fail(msg="契約が見つかりませんでした")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/contract/add", summary="BP会社契約新規作成")  
+async def add_bp_contract(contract_data: AddBPCompanyContractSchema):
+    try:
+        data = await bp_controller.create_bp_contract_dict(contract_data=contract_data)
+        return Success(data=data)
+    except ValueError as ve:
+        return Fail(msg=str(ve))
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.put("/contract/update", summary="BP会社契約更新")
+async def update_bp_contract(contract_data: UpdateBPCompanyContractSchema):
+    try:
+        data = await bp_controller.update_bp_contract_dict(contract_data=contract_data)
+        if data:
+            return Success(data=data)
+        else:
+            return Fail(msg="契約が見つかりませんでした")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.delete("/contract/delete", summary="BP会社契約削除")
+async def delete_bp_contract(id: int = Query(..., description="契約ID")):
+    try:
+        result = await bp_controller.delete_bp_contract(contract_id=id)
+        if result:
+            return Success(msg="契約を削除しました")
+        else:
+            return Fail(msg="契約が見つかりませんでした")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/contract/documents/{contract_id}", summary="契約文書一覧取得")
+async def get_contract_documents(contract_id: int):
+    try:
+        data = await bp_controller.get_contract_documents(contract_id=contract_id)
+        return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+

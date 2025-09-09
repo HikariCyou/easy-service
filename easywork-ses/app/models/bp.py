@@ -1,10 +1,10 @@
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import (AttendanceCalcType, BPCompanyStatus,
+from app.models.enums import (AttendanceCalcType, BPCompanyStatus, BPContractStatus,
                               DecimalProcessingPosition, DecimalProcessingType,
                               EmploymentStatus, MarriageStatus, PaymentDay,
-                              PaymentSite)
+                              PaymentSite, SESContractForm)
 
 
 class BPCompany(BaseModel, TimestampMixin):
@@ -67,6 +67,7 @@ class BPCompany(BaseModel, TimestampMixin):
     order_email_configs: fields.ReverseRelation["BPOrderEmailConfig"]
     payment_email_configs: fields.ReverseRelation["BPPaymentEmailConfig"]
     bank_accounts: fields.ReverseRelation["BankAccount"]
+    contracts: fields.ReverseRelation["BPCompanyContract"]
 
     class Meta:
         table = "ses_bp_company"
@@ -354,3 +355,100 @@ class BPPaymentEmailConfig(BaseModel, TimestampMixin):
 
     def __str__(self):
         return f"{self.bp_company.name} - {self.config_name}"
+
+
+class BPCompanyContract(BaseModel, TimestampMixin):
+    """
+    BP協力会社との基本契約管理
+    BP協力会社と自社との間の基本業務提携契約
+    """
+    
+    # 契約先BP会社
+    bp_company = fields.ForeignKeyField("models.BPCompany", related_name="contracts", description="契約先BP会社")
+    
+    # 契約基本情報
+    contract_number = fields.CharField(max_length=50, unique=True, description="契約書番号")
+    contract_name = fields.CharField(max_length=200, description="契約名称")
+    contract_form = fields.CharEnumField(SESContractForm, description="SES契約形態")
+    
+    # 契約期間
+    contract_start_date = fields.DateField(description="契約開始日")
+    contract_end_date = fields.DateField(description="契約終了日")
+    
+    # 契約ステータス
+    status = fields.CharEnumField(BPContractStatus, default=BPContractStatus.ACTIVE, description="契約ステータス")
+    
+    # 契約文書管理（JSONFieldでファイル情報を保存）
+    contract_documents = fields.JSONField(default=list, description="契約書類ファイル情報")
+    # JSONField構造例: [{"filename": "contract.pdf", "upload_date": "2024-01-01", "file_path": "/path/to/file", "file_size": 1024, "mime_type": "application/pdf", "description": "基本契約書"}]
+    
+    # 備考
+    remark = fields.TextField(null=True, description="備考")
+
+    class Meta:
+        table = "ses_bp_company_contract"
+        table_description = "BP協力会社基本契約管理"
+        indexes = [
+            ("bp_company", "status"),
+            ("contract_start_date", "contract_end_date"),
+            ("status",),
+        ]
+
+    @property
+    def is_active(self) -> bool:
+        """契約が有効かどうか"""
+        from datetime import date
+        today = date.today()
+        
+        if self.status != BPContractStatus.ACTIVE:
+            return False
+            
+        if today < self.contract_start_date:
+            return False
+            
+        if today > self.contract_end_date:
+            return False
+            
+        return True
+
+    @property
+    def days_until_expiry(self) -> int:
+        """契約終了までの日数"""
+        from datetime import date
+        today = date.today()
+        
+        if today > self.contract_end_date:
+            return 0
+            
+        return (self.contract_end_date - today).days
+
+    @property
+    def needs_renewal_notice(self) -> bool:
+        """更新通知が必要かどうか（30日前）"""
+        return self.days_until_expiry <= 30
+
+    def add_contract_document(self, filename: str, file_path: str, file_size: int, 
+                            mime_type: str, description: str = None) -> None:
+        """契約文書を追加"""
+        from datetime import datetime
+        
+        if self.contract_documents is None:
+            self.contract_documents = []
+            
+        document_info = {
+            "filename": filename,
+            "file_path": file_path,
+            "file_size": file_size,
+            "mime_type": mime_type,
+            "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "description": description or "契約関連文書"
+        }
+        
+        self.contract_documents.append(document_info)
+
+    def get_contract_documents(self) -> list:
+        """契約文書一覧を取得"""
+        return self.contract_documents or []
+
+    def __str__(self):
+        return f"{self.contract_number} - {self.bp_company.name} ({self.contract_form})"

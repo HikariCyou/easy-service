@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field
 
@@ -172,4 +172,32 @@ class UpdateBPPaymentEmailConfigSchema(BaseModel):
     is_active: Optional[bool] = Field(None, description="有効フラグ")
     sender_sales_rep_id: Optional[int] = Field(None, description="送信者（BP営業担当者ID）")
     cc_sales_rep_ids: Optional[list[int]] = Field(None, description="CC営業担当者IDs")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+# ==================== BP会社契約関連のSchema ====================
+
+
+class AddBPCompanyContractSchema(BaseModel):
+    bp_company_id: int = Field(..., description="契約先BP会社ID")
+    contract_number: str = Field(..., description="契約書番号")
+    contract_name: str = Field(..., description="契約名称")
+    contract_form: str = Field(..., description="SES契約形態")
+    contract_start_date: date = Field(..., description="契約開始日")
+    contract_end_date: date = Field(..., description="契約終了日")
+    status: Optional[str] = Field("有効", description="契約ステータス")
+    contract_documents: Optional[List[str]] = Field([], description="契約書類ファイル情報")
+    remark: Optional[str] = Field(None, description="備考")
+
+
+class UpdateBPCompanyContractSchema(BaseModel):
+    id: int = Field(..., description="契約ID")
+    bp_company_id: Optional[int] = Field(None, description="契約先BP会社ID")
+    contract_number: Optional[str] = Field(None, description="契約書番号")
+    contract_name: Optional[str] = Field(None, description="契約名称")
+    contract_form: Optional[str] = Field(None, description="SES契約形態")
+    contract_start_date: Optional[date] = Field(None, description="契約開始日")
+    contract_end_date: Optional[date] = Field(None, description="契約終了日")
+    status: Optional[str] = Field(None, description="契約ステータス")
+    contract_documents: Optional[List[str]] = Field(None, description="契約書類ファイル情報")
     remark: Optional[str] = Field(None, description="備考")

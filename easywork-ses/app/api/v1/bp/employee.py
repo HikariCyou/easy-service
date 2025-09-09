@@ -15,9 +15,12 @@ async def get_bp_employees_list(
     page: Optional[int] = Query(1, ge=1),
     pageSize: Optional[int] = Query(10, ge=1, le=100),
     name: Optional[str] = Query(None),
+    bp_company_id: Optional[int] = Query(None)
 ):
     try:
-        search_params = {"name": name} if name else None
+        search_params = {"name": name} if name else {}
+        if bp_company_id:
+            search_params["bp_company_id"] = bp_company_id
         bp_employee_data, total = await personnel_controller.list_bp_employees(
             page=page, page_size=pageSize, search_params=search_params
         )
