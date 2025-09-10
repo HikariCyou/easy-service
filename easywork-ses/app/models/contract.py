@@ -5,7 +5,8 @@ from tortoise.signals import post_save, post_delete
 
 from app.models.base import BaseModel, TimestampMixin
 from app.models.enums import (
-    ContractStatus, ContractType, ContractChangeType, ContractChangeReason, ContractItemType, PaymentUnit
+    ContractStatus, ContractType, ContractChangeType, ContractChangeReason, ContractItemType, PaymentUnit,
+    SESContractForm, WorkRoleClassification, TimeCalculationType
 )
 
 
@@ -17,6 +18,11 @@ class Contract(BaseModel, TimestampMixin):
     # 契約基本情報
     contract_number = fields.CharField(max_length=50, unique=True, description="契約番号")
     contract_type = fields.CharEnumField(ContractType, description="契約種別（BP/自社/フリーランス）")
+    
+    # 契約形態・職責・計算方式
+    contract_form = fields.CharEnumField(SESContractForm, null=True, description="契約形態（業務委託等）")
+    work_role = fields.CharEnumField(WorkRoleClassification, null=True, description="作業区分（職責）")
+    time_calculation_type = fields.CharEnumField(TimeCalculationType, null=True, description="時間計算種類")
 
     # 関連
     case = fields.ForeignKeyField("models.Case", related_name="contracts", description="案件")
@@ -31,9 +37,6 @@ class Contract(BaseModel, TimestampMixin):
     # 契約期間
     contract_start_date = fields.DateField(description="契約開始日")
     contract_end_date = fields.DateField(description="契約終了日")
-
-    # 単価・条件
-    unit_price = fields.FloatField(description="基本単価（月額）")
 
     # 出勤時間管理（重要な部分）
     standard_working_hours = fields.FloatField(
@@ -93,13 +96,10 @@ class Contract(BaseModel, TimestampMixin):
         """SES月額精算計算（完全版）
         基本給 + 残業代 - 欠勤控除 + 各種手当
         """
-        # 時間単価を計算
-        hourly_rate = self.unit_price / self.standard_working_hours
-        
         result = {
             "contract_number": self.contract_number,
             "actual_hours": actual_hours,
-            "base_salary": self.unit_price,
+            "base_salary": 0.0,
             "overtime_payment": 0.0,
             "shortage_deduction": 0.0,
             "allowances": 0.0,
@@ -109,10 +109,28 @@ class Contract(BaseModel, TimestampMixin):
             "item_details": []
         }
 
-        # 1. 基本給（固定）
-        result["calculation_details"].append(f"基本給: {self.unit_price:.0f}円")
+        # 契約項目を全て取得
+        calculation_items = await self.calculation_items.filter(is_active=True).all()
+        
+        # 基本給項目を探す
+        base_salary_item = None
+        hourly_rate = 0.0
+        
+        for item in calculation_items:
+            if item.item_type == "BASIC_SALARY":
+                base_salary_item = item
+                # 基本給から時間単価を計算
+                base_salary_amount = item.calculate_monthly_amount(actual_hours, 0)
+                result["base_salary"] = base_salary_amount
+                hourly_rate = base_salary_amount / self.standard_working_hours
+                result["calculation_details"].append(f"基本給: {base_salary_amount:.0f}円")
+                break
+        
+        if not base_salary_item:
+            result["calculation_details"].append("基本給項目が設定されていません")
+            return result
 
-        # 2. 残業代計算（上限時間を超えた分）
+        # 残業代計算（上限時間を超えた分）
         if self.max_working_hours and actual_hours > self.max_working_hours:
             # 無償残業時間を考慮
             overtime_hours = actual_hours - self.max_working_hours - self.free_overtime_hours
@@ -123,7 +141,7 @@ class Contract(BaseModel, TimestampMixin):
                     f"残業代: {overtime_hours}h × {hourly_rate:.2f}円/h × {self.overtime_rate} = {overtime_payment:.0f}円"
                 )
 
-        # 3. 欠勤控除計算（下限時間を下回った分）
+        # 欠勤控除計算（下限時間を下回った分）
         if self.min_working_hours and actual_hours < self.min_working_hours:
             # 最低労働時間を下回る場合は不足分を控除
             shortage_hours = self.min_working_hours - actual_hours
@@ -133,9 +151,12 @@ class Contract(BaseModel, TimestampMixin):
                 f"欠勤控除: {shortage_hours}h × {hourly_rate:.2f}円/h × {self.shortage_rate} = {shortage_deduction:.0f}円"
             )
 
-        # 4. 契約項目からの計算（手当・控除項目）
-        calculation_items = await self.calculation_items.filter(is_active=True).all()
+        # その他の契約項目からの計算（手当・控除項目）
         for item in calculation_items:
+            # 基本給は既に処理済みなのでスキップ
+            if item.item_type == "BASIC_SALARY":
+                continue
+                
             monthly_amount = item.calculate_monthly_amount(actual_hours, hourly_rate)
             
             item_detail = {
@@ -157,7 +178,7 @@ class Contract(BaseModel, TimestampMixin):
                 result["allowances"] += monthly_amount
                 result["calculation_details"].append(f"{item.item_name}: +{monthly_amount:.0f}円 [{item.payment_unit}]")
 
-        # 5. 合計計算
+        # 合計計算
         result["total_payment"] = (
             result["base_salary"] +
             result["overtime_payment"] +
@@ -212,9 +233,11 @@ class Contract(BaseModel, TimestampMixin):
         self.contract_end_date = termination_date
         await self.save()
         
-        # 人材の稼働状態を自動更新
-        if self.personnel:
-            await self.personnel.check_and_update_status_by_contracts()
+        # 人材の稼働状況を自動更新
+        if self.personnel_id:
+            personnel = await self.personnel
+            if personnel:
+                await personnel.check_and_update_status_by_contracts()
         
         after_values = {
             "status": self.status,
@@ -232,7 +255,7 @@ class Contract(BaseModel, TimestampMixin):
             requested_by=requested_by
         )
 
-    async def update_conditions(self, new_unit_price: float = None, 
+    async def update_conditions(self, new_base_salary: float = None, 
                                new_working_hours: float = None,
                                reason: ContractChangeReason = ContractChangeReason.CLIENT_REQUEST,
                                effective_date = None, requested_by: str = None):
@@ -243,21 +266,24 @@ class Contract(BaseModel, TimestampMixin):
         after_values = {}
         changes = []
         
-        if new_unit_price is not None:
-            before_values["unit_price"] = str(self.unit_price)
-            self.unit_price = new_unit_price
-            after_values["unit_price"] = str(self.unit_price)
-            changes.append(f"単価: {before_values['unit_price']}円 → {after_values['unit_price']}円")
+        if new_base_salary is not None:
+            # 基本給項目を更新
+            base_salary_item = await self.calculation_items.filter(item_type="BASIC_SALARY").first()
+            if base_salary_item:
+                before_values["base_salary"] = str(base_salary_item.amount)
+                base_salary_item.amount = new_base_salary
+                await base_salary_item.save()
+                after_values["base_salary"] = str(base_salary_item.amount)
+                changes.append(f"基本給: {before_values['base_salary']}円 → {after_values['base_salary']}円")
             
         if new_working_hours is not None:
             before_values["standard_working_hours"] = str(self.standard_working_hours)
             self.standard_working_hours = new_working_hours
             after_values["standard_working_hours"] = str(self.standard_working_hours)
             changes.append(f"標準稼働時間: {before_values['standard_working_hours']}h → {after_values['standard_working_hours']}h")
+            await self.save()
         
         if changes:
-            await self.save()
-            
             # 変更履歴を記録
             await self.record_change(
                 change_type=ContractChangeType.CONDITION_CHANGE,
@@ -482,16 +508,20 @@ class ContractCalculationItem(BaseModel, TimestampMixin):
 
 # Contract信号处理：自动更新Personnel的稼働状态
 @post_save(Contract)
-async def contract_post_save(sender, instance, created, **kwargs):
-    """契約保存後に人材の稼働状態を自動更新"""
-    if instance.personnel:
-        await instance.personnel.check_and_update_status_by_contracts()
+async def contract_post_save(sender, instance, created, using_db, update_fields):
+    """契約保存後に人材の稼働状況を自動更新"""
+    if instance.personnel_id:
+        personnel = await instance.personnel
+        if personnel:
+            await personnel.check_and_update_status_by_contracts()
 
 
 @post_delete(Contract) 
-async def contract_post_delete(sender, instance, **kwargs):
-    """契約削除後に人材の稼働状態を自動更新"""
-    if instance.personnel:
-        await instance.personnel.check_and_update_status_by_contracts()
+async def contract_post_delete(sender, instance, using_db):
+    """契約削除後に人材の稼働状況を自動更新"""
+    if instance.personnel_id:
+        personnel = await instance.personnel
+        if personnel:
+            await personnel.check_and_update_status_by_contracts()
 
 

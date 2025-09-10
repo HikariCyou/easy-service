@@ -405,3 +405,26 @@ class BusinessClassification(StrEnum):
     SERVICE = "サービス"  # サービス
     OTHER = "その他"  # その他
 
+
+class WorkRoleClassification(StrEnum):
+    """作業区分（職責）"""
+    OP = "オペレーター"  # オペレーター
+    PG = "プログラマー"  # プログラマー  
+    SP = "システムプログラマー"  # システムプログラマー
+    SE = "システムエンジニア"  # システムエンジニア
+    SL = "サブリーダー"  # サブリーダー
+    L = "リーダー"  # リーダー
+    PM = "マネージャー"  # マネージャー
+
+
+class TimeCalculationType(StrEnum):
+    """時間計算種類"""
+    FIXED_160 = "固定160時間"  # 毎月固定160時間で計算（実働時間に関係なく固定）
+    BUSINESS_DAYS_8 = "営業日数×8"  # 営業日数×8時間で月間工時計算
+    BUSINESS_DAYS_7_9 = "営業日数×7.9"  # 営業日数×7.9時間で月間工時計算（休憩時間調整）
+    BUSINESS_DAYS_7_75 = "営業日数×7.75"  # 営業日数×7.75時間で月間工時計算（標準休憩時間除く）
+    FIXED_AMOUNT = "固定金額"  # 工時に関係なく完全固定金額
+    HOURLY_RATE = "時給"  # 実働時間×時給での純粋時給制
+    CUSTOM_CALCULATION = "自定義計算"  # プロジェクト固有の計算方式
+    OTHER = "その他"  # 上記以外の特殊な計算方式
+

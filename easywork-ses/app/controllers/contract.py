@@ -83,7 +83,7 @@ class ContractController:
                 contract=contract,
                 item_name=item.name,
                 item_type=item_type,
-                amount=item.amount,
+                amount=item.amount or 0.0,
                 payment_unit=payment_unit,
                 comment=item.comment,
                 sort_order=i
@@ -199,9 +199,11 @@ class ContractController:
             if contract_data.calculation_items:
                 await self._handle_calculation_items(contract, contract_data.calculation_items)
             
-            # 人材の稼働状態を自動更新（契約作成時）
-            if contract.personnel:
-                await contract.personnel.update_employment_status_to_working(contract.contract_end_date)
+            # 人材の稼働状态を自動更新（契約作成時）
+            if contract.personnel_id:
+                personnel = await contract.personnel
+                if personnel:
+                    await personnel.update_employment_status_to_working(contract.contract_end_date)
                 
             return contract
 
@@ -221,9 +223,11 @@ class ContractController:
             if contract_data.calculation_items is not None:
                 await self._handle_calculation_items(contract, contract_data.calculation_items)
             
-            # 人材の稼働状態を自動更新（契約更新時）
-            if contract.personnel:
-                await contract.personnel.check_and_update_status_by_contracts()
+            # 人材の稼働状況を自動更新（契約更新時）
+            if contract.personnel_id:
+                personnel = await contract.personnel
+                if personnel:
+                    await personnel.check_and_update_status_by_contracts()
                 
             return contract
 
@@ -242,6 +246,15 @@ class ContractController:
             return True
         else:
             raise Exception("Contracts not found")
+
+    async def get_contract_by_personnel_id(self, personnel_id: int):
+        """
+        要員IDで契約詳細を取得（関連案件も含む）
+        """
+        contract = await Contract.get_or_none(personnel_id=personnel_id).prefetch_related(
+            'case', 'personnel', 'calculation_items'
+        )
+        return contract
 
 
 

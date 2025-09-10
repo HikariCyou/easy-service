@@ -9,7 +9,7 @@ class ContractCalculationItemCreate(BaseModel):
     """契約精算項目作成"""
     type: str = Field(..., description="項目種別", examples=["BASIC_SALARY", "OVERTIME_FEE", "TRANSPORTATION"])
     name: str = Field(..., description="項目名称", examples=["基本給", "残業代", "交通費"])
-    amount: float = Field(..., description="金額", examples=[40, 1.5, 10000])
+    amount: Optional[float] = Field(None, description="金額", examples=[40, 1.5, 10000])
     unit: str = Field(..., description="支払い単位", examples=["万円/月", "円/時間", "円/月"])
     comment: Optional[str] = Field(None, description="備考", examples=["月額基本給"])
 
@@ -20,7 +20,6 @@ class CreateContract(BaseModel):
     personnel_id: int = Field(..., description="要員ID（統一Personnel）", examples=[1])
     contract_start_date: Optional[date] = Field(None, description="契約開始日", examples=["2022-01-01"])
     contract_end_date: Optional[date] = Field(None, description="契約終了日", examples=["2022-12-31"])
-    unit_price: Optional[float] = Field(None, description="単価", examples=["10000"])
     standard_working_hours: Optional[float] = Field(None, description="標準労働時間", examples=["8"])
     min_working_hours: Optional[float] = Field(None, description="最低労働時間", examples=["4"])
     max_working_hours: Optional[float] = Field(None, description="最高労働時間", examples=["12"])
@@ -62,7 +61,7 @@ class EarlyTerminationRequest(BaseModel):
 class ContractConditionUpdate(BaseModel):
     """契約条件変更"""
     contract_id: int = Field(..., description="対象契約ID", examples=[1])
-    new_unit_price: Optional[float] = Field(None, description="新単価", examples=[650000.0])
+    new_base_salary: Optional[float] = Field(None, description="新基本給", examples=[650000.0])
     new_working_hours: Optional[float] = Field(None, description="新標準稼働時間", examples=[180.0])
     new_contract_end_date: Optional[date] = Field(None, description="新契約終了日")
     reason: str = Field(default="クライアント要望", description="変更理由")
@@ -141,7 +140,7 @@ class ContractItemCreate(BaseModel):
     """契約精算項目作成"""
     item_name: str = Field(..., description="項目名称", examples=["交通費", "住宅手当", "欠勤控除"])
     item_type: str = Field(..., description="項目種別", examples=["交通費", "手当", "欠勤控除"])
-    amount: float = Field(..., description="金額", examples=[10000.0, 1.5])
+    amount: Optional[float] = Field(None, description="金額", examples=[10000.0, 1.5])
     payment_unit: str = Field(..., description="支払い単位", examples=["円/月", "円/時間", "円/分"])
     comment: Optional[str] = Field(None, description="備考・詳細説明")
     is_active: bool = Field(True, description="有効フラグ")

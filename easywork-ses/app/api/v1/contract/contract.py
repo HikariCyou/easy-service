@@ -44,7 +44,7 @@ async def get_contract_list(
 
 
 @router.get("/get", summary="IDで契約取得")
-async def get_contract(id: int = Query(..., description="案件ID")):
+async def get_contract(id: int = Query(..., description="契約ID")):
     try:
         contract = await contract_controller.get_contract(id=id)
         if contract:
@@ -52,6 +52,19 @@ async def get_contract(id: int = Query(..., description="案件ID")):
             return Success(data= data)
         else:
             return Fail(msg="契約見つかりません")
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/get-by-personnel", summary="要員IDで契約詳細取得")
+async def get_contract_by_personnel(personnel_id: int = Query(..., description="要員ID")):
+    try:
+        contract = await contract_controller.get_contract_by_personnel_id(personnel_id=personnel_id)
+        if contract:
+            data = await contract_controller.contract_to_dict(contract=contract, include_relations=True)
+            return Success(data=data)
+        else:
+            return Success(data={})
     except Exception as e:
         return Fail(msg=str(e))
 
