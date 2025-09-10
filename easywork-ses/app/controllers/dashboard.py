@@ -153,8 +153,10 @@ class DashboardController:
 
     async def get_revenue_analysis(self) -> Dict[str, Any]:
         """
-        获取收益分析（单价分布、月收入统计等）
+        获取收益分析（基于精算项目的月收入统计等）
         """
+        from app.models.enums import ContractItemType, PaymentUnit
+        
         today = date.today()
         current_month = today.replace(day=1)
         
@@ -163,24 +165,47 @@ class DashboardController:
             status=ContractStatus.ACTIVE,
             contract_start_date__lte=today,
             contract_end_date__gte=today
-        ).prefetch_related('personnel')
+        ).prefetch_related('personnel', 'calculation_items')
         
-        total_monthly_revenue = sum(float(contract.unit_price) for contract in active_contracts)
-        
-        # 按人员类型分组的收入
+        # 计算总月收入和按类型分组的收入
+        total_monthly_revenue = 0
         revenue_by_type = {
             PersonType.get_label(PersonType.EMPLOYEE): 0,
             PersonType.get_label(PersonType.FREELANCER): 0,
             PersonType.get_label(PersonType.BP_EMPLOYEE): 0
         }
         
+        contract_revenues = []  # 存储每个合约的月收入用于分布分析
+        
         for contract in active_contracts:
+            # 计算合约月收入（基于基本给项目）
+            basic_salary_item = await contract.calculation_items.filter(
+                item_type=ContractItemType.BASIC_SALARY, is_active=True
+            ).first()
+            
+            monthly_revenue = 0
+            if basic_salary_item:
+                # 计算月收入
+                if basic_salary_item.payment_unit == PaymentUnit.TEN_THOUSAND_YEN_PER_MONTH:
+                    monthly_revenue = basic_salary_item.amount * 10000
+                elif basic_salary_item.payment_unit == PaymentUnit.YEN_PER_MONTH:
+                    monthly_revenue = basic_salary_item.amount
+                else:
+                    # 对于其他单位，使用标准工时换算
+                    monthly_revenue = basic_salary_item.calculate_monthly_amount(
+                        contract.standard_working_hours, 0
+                    )
+            
+            total_monthly_revenue += monthly_revenue
+            contract_revenues.append(monthly_revenue)
+            
+            # 按人员类型分组
             if contract.personnel:
                 person_type = contract.personnel.person_type.value
-                revenue_by_type[ PersonType.get_label(person_type) ] += float(contract.unit_price)
+                revenue_by_type[PersonType.get_label(person_type)] += monthly_revenue
         
-        # 单价分布
-        unit_price_ranges = [
+        # 收入分布（基于月收入）
+        revenue_ranges = [
             ("30万以下", 0, 300000),
             ("30-50万", 300000, 500000),
             ("50-70万", 500000, 700000),
@@ -188,39 +213,32 @@ class DashboardController:
             ("100万以上", 1000000, 10000000)
         ]
         
-        unit_price_distribution = []
-        for label, min_price, max_price in unit_price_ranges:
-            if max_price == 10000000:  # 100万以上
-                count = await Contract.filter(
-                    unit_price__gte=min_price,
-                    status=ContractStatus.ACTIVE
-                ).count()
-            else:
-                count = await Contract.filter(
-                    unit_price__gte=min_price,
-                    unit_price__lt=max_price,
-                    status=ContractStatus.ACTIVE
-                ).count()
-            unit_price_distribution.append({
+        revenue_distribution = []
+        for label, min_revenue, max_revenue in revenue_ranges:
+            count = 0
+            for revenue in contract_revenues:
+                if max_revenue == 10000000:  # 100万以上
+                    if revenue >= min_revenue:
+                        count += 1
+                else:
+                    if min_revenue <= revenue < max_revenue:
+                        count += 1
+            
+            revenue_distribution.append({
                 "name": label,
                 "value": count
             })
         
-        # 平均单价 - 手动计算
-        active_contracts_with_price = await Contract.filter(
-            status=ContractStatus.ACTIVE,
-            unit_price__isnull=False
-        ).values_list('unit_price', flat=True)
-        
-        avg_unit_price = 0
-        if active_contracts_with_price:
-            avg_unit_price = sum(float(price) for price in active_contracts_with_price) / len(active_contracts_with_price)
+        # 平均月收入
+        avg_monthly_revenue = 0
+        if contract_revenues:
+            avg_monthly_revenue = sum(contract_revenues) / len(contract_revenues)
         
         return {
             "total_monthly_revenue": total_monthly_revenue,
             "revenue_by_type": revenue_by_type,
-            "unit_price_distribution": unit_price_distribution,
-            "average_unit_price": avg_unit_price,
+            "revenue_distribution": revenue_distribution,
+            "average_monthly_revenue": avg_monthly_revenue,
             "active_contracts_count": len(active_contracts)
         }
 
