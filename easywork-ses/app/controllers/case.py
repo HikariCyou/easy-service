@@ -27,7 +27,7 @@ class CaseController:
     async def list_cases(self, page: int = 1, page_size: int = 10, search: Q = None, order: list = []):
         query = Case.filter(search)
         total = await query.count()
-        cases = await query.select_related("client_company").order_by(*order).limit(page_size).offset((page - 1) * page_size).all()
+        cases = await query.select_related("client_company", "client_sales_representative", "company_sales_representative").order_by(*order).limit(page_size).offset((page - 1) * page_size).all()
         return cases, total
 
     async def get_cases_with_filters(
@@ -52,24 +52,65 @@ class CaseController:
             case_dict = await case.to_dict()
             if case.client_company:
                 case_dict['client_company'] = await case.client_company.to_dict()
+            if case.client_sales_representative:
+                case_dict['client_sales_representative'] = await case.client_sales_representative.to_dict()
+            if case.company_sales_representative:
+                case_dict['company_sales_representative'] = await case.company_sales_representative.to_dict()
             data.append(case_dict)
         return data, total
 
     async def get_case_by_id(self, case_id: int):
-        case = await Case.get_or_none(id=case_id).select_related("client_company")
+        case = await Case.get_or_none(id=case_id).select_related("client_company", "client_sales_representative", "company_sales_representative")
         return case
 
     async def get_case_dict_by_id(self, case_id: int):
         case = await self.get_case_by_id(case_id)
         if case:
             case_dict = await case.to_dict()
-            # 添加客户公司信息
+            # 添加关联信息
             if case.client_company:
                 case_dict['client_company'] = await case.client_company.to_dict()
+            if case.client_sales_representative:
+                case_dict['client_sales_representative'] = await case.client_sales_representative.to_dict()
+            if case.company_sales_representative:
+                case_dict['company_sales_representative'] = await case.company_sales_representative.to_dict()
             return case_dict
         return None
 
+    async def validate_sales_representatives(self, case_data, existing_case=None):
+        """営業担当の妥当性検証"""
+        # 取引先担当営業の検証
+        if case_data.client_sales_representative_id:
+            from app.models.client import ClientContact
+            client_rep = await ClientContact.get_or_none(id=case_data.client_sales_representative_id)
+            if not client_rep:
+                raise ValueError(f"取引先担当営業ID {case_data.client_sales_representative_id} が見つかりません")
+            
+            # 同じ取引先会社かチェック
+            client_company_id = None
+            if hasattr(case_data, 'client_company_id') and case_data.client_company_id:
+                client_company_id = case_data.client_company_id
+            elif existing_case:
+                client_company_id = existing_case.client_company_id
+            
+            if client_company_id and client_rep.client_company_id != client_company_id:
+                raise ValueError("取引先担当営業は同じ取引先会社の担当者である必要があります")
+        
+        # 自社担当営業の検証
+        if case_data.company_sales_representative_id:
+            from app.models.personnel import Personnel
+            from app.models.enums import PersonType
+            company_rep = await Personnel.get_or_none(id=case_data.company_sales_representative_id)
+            if not company_rep:
+                raise ValueError(f"自社担当営業ID {case_data.company_sales_representative_id} が見つかりません")
+            # 自社員工かチェック
+            if company_rep.person_type != PersonType.EMPLOYEE:
+                raise ValueError("自社担当営業は自社員工である必要があります")
+
     async def create_case(self, case_data: AddCaseSchema):
+        # 営業担当の妥当性検証
+        await self.validate_sales_representatives(case_data)
+        
         async with in_transaction():
             data_dict = clean_dict(case_data.model_dump(exclude_unset=True))
             case = await Case.create(**data_dict)
@@ -100,11 +141,16 @@ class CaseController:
 
     async def update_case(self, case_data: UpdateCaseSchema):
         case = await Case.get_or_none(id=case_data.id)
-        if case:
-            async with in_transaction():
-                data_dict = clean_dict(case_data.model_dump(exclude_unset=True))
-                await case.update_from_dict(data_dict)
-                await case.save()
+        if not case:
+            return None
+            
+        # 営業担当の妥当性検証
+        await self.validate_sales_representatives(case_data, existing_case=case)
+        
+        async with in_transaction():
+            data_dict = clean_dict(case_data.model_dump(exclude_unset=True))
+            await case.update_from_dict(data_dict)
+            await case.save()
         return case
 
     async def update_case_dict(self, case_data: UpdateCaseSchema):

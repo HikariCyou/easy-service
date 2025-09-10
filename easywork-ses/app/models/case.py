@@ -3,7 +3,7 @@ from datetime import datetime
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import CandidateStatus, CaseStatus, ChangeType
+from app.models.enums import CandidateStatus, CaseStatus, ChangeType, ContractCompanyType, BusinessClassification
 
 
 class Case(BaseModel, TimestampMixin):
@@ -13,6 +13,11 @@ class Case(BaseModel, TimestampMixin):
 
     title = fields.CharField(max_length=255, description="案件タイトル")
     client_company = fields.ForeignKeyField("models.ClientCompany", related_name="cases", description="取り先会社")
+    
+    # 営業担当
+    client_sales_representative = fields.ForeignKeyField("models.ClientContact", null=True, related_name="managed_cases", description="取引先担当営業")
+    company_sales_representative = fields.ForeignKeyField("models.Personnel", null=True, related_name="sales_managed_cases", description="自社担当営業")
+    
     location = fields.CharField(max_length=255, null=True, description="勤務地")
     # もっと最寄り駅
     station = fields.CharField(max_length=255, null=True, description="最寄り駅")
@@ -31,6 +36,11 @@ class Case(BaseModel, TimestampMixin):
     status = fields.CharEnumField(CaseStatus, default=CaseStatus.OPEN, description="ステータス")
     manager = fields.BigIntField(null=True, description="案件マネージャーID")
     description = fields.TextField(null=True, description="詳細・備考")
+    
+    # 追加フィールド
+    contract_company_type = fields.CharEnumField(ContractCompanyType, null=True, description="契約会社種別")
+    business_classification = fields.CharEnumField(BusinessClassification, null=True, description="事業分類")
+    department = fields.CharField(max_length=255, null=True, description="所属部署")
 
     candidates: fields.ReverseRelation["CaseCandidate"]
     contracts: fields.ReverseRelation["Contract"]

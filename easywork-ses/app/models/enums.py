@@ -389,3 +389,19 @@ class SESContractForm(StrEnum):
     IKKATSU = "一括"  # 一括
     OTHER = "その他"  # その他
 
+
+class ContractCompanyType(StrEnum):
+    """契約会社種別"""
+    CLIENT_COMPANY = "取引会社"  # 取引会社
+    COMPANY_INFO = "会社情報"  # 会社情報
+
+
+class BusinessClassification(StrEnum):
+    """事業分類"""
+    FINANCE_BANK = "金融（銀行）"  # 金融（銀行）
+    FINANCE_INSURANCE = "金融（保険）"  # 金融（保険）
+    FINANCE_SECURITIES = "金融（証券）"  # 金融（証券）
+    MANUFACTURING = "制造"  # 制造
+    SERVICE = "サービス"  # サービス
+    OTHER = "その他"  # その他
+

@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Optional, Dict, Any, List
 
 from pydantic import BaseModel, Field
+from app.models.enums import ContractCompanyType, BusinessClassification
 
 
 class CaseTerminationSchema(BaseModel):
@@ -16,6 +17,8 @@ class CaseTerminationSchema(BaseModel):
 class AddCaseSchema(BaseModel):
     title: str = Field(..., description="案件タイトル")
     client_company_id: int = Field(..., description="取引先会社ID")
+    client_sales_representative_id: Optional[int] = Field(None, description="取引先担当営業ID")
+    company_sales_representative_id: Optional[int] = Field(None, description="自社担当営業ID")
     location: Optional[str] = Field(None, description="勤務地")
     station: Optional[str] = Field(None, description="最寄駅")
     start_date: Optional[date] = Field(None, description="開始日")
@@ -27,12 +30,17 @@ class AddCaseSchema(BaseModel):
     status: Optional[str] = Field("open", description="ステータス")
     manager: Optional[int] = Field(None, description="案件マネージャーID")
     description: Optional[str] = Field(None, description="詳細・備考")
+    contract_company_type: Optional[ContractCompanyType] = Field(None, description="契約会社種別")
+    business_classification: Optional[BusinessClassification] = Field(None, description="事業分類")
+    department: Optional[str] = Field(None, description="所属部署")
 
 
 class UpdateCaseSchema(BaseModel):
     id: int = Field(..., description="案件ID")
     title: Optional[str] = Field(None, description="案件タイトル")
     client_company_id: Optional[int] = Field(None, description="取引先会社ID")
+    client_sales_representative_id: Optional[int] = Field(None, description="取引先担当営業ID")
+    company_sales_representative_id: Optional[int] = Field(None, description="自社担当営業ID")
     location: Optional[str] = Field(None, description="勤務地")
     station: Optional[str] = Field(None, description="最寄駅")
     start_date: Optional[date] = Field(None, description="開始日")
@@ -44,6 +52,9 @@ class UpdateCaseSchema(BaseModel):
     status: Optional[str] = Field(None, description="ステータス")
     manager: Optional[int] = Field(None, description="案件マネージャーID")
     description: Optional[str] = Field(None, description="詳細・備考")
+    contract_company_type: Optional[ContractCompanyType] = Field(None, description="契約会社種別")
+    business_classification: Optional[BusinessClassification] = Field(None, description="事業分類")
+    department: Optional[str] = Field(None, description="所属部署")
 
 
 class AddCaseCandidateSchema(BaseModel):

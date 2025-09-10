@@ -142,3 +142,58 @@ async def terminate_case(termination_data: CaseTerminationSchema):
         return Success(data=result)
     except Exception as e:
         return Fail(msg=str(e))
+
+
+@router.get("/client-sales-representatives/{client_company_id}", summary="取引先営業担当者一覧取得")
+async def get_client_sales_representatives(client_company_id: int):
+    """指定した取引先会社の営業担当者一覧を取得"""
+    try:
+        from app.models.client import ClientContact
+        representatives = await ClientContact.filter(
+            client_company_id=client_company_id,
+            is_active=True
+        ).all()
+        
+        data = []
+        for rep in representatives:
+            rep_data = await rep.to_dict()
+            data.append({
+                "id": rep_data["id"],
+                "name": rep_data["name"],
+                "name_kana": rep_data.get("name_kana"),
+                "email": rep_data["email"],
+                "phone": rep_data.get("phone"),
+                "is_primary": rep_data.get("is_primary", False)
+            })
+        
+        return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/company-sales-representatives", summary="自社営業担当者一覧取得")
+async def get_company_sales_representatives():
+    """自社の営業担当者（Employee）一覧を取得"""
+    try:
+        from app.models.personnel import Personnel
+        from app.models.enums import PersonType
+        
+        representatives = await Personnel.filter(
+            person_type=PersonType.EMPLOYEE,
+            is_active=True
+        ).all()
+        
+        data = []
+        for rep in representatives:
+            rep_data = await rep.to_dict()
+            data.append({
+                "id": rep_data["id"],
+                "name": rep_data["name"],
+                "code": rep_data.get("code"),
+                "email": rep_data.get("email"),
+                "phone": rep_data.get("phone")
+            })
+        
+        return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
