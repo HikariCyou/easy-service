@@ -12,8 +12,13 @@ class AuthClient:
         调用 SSO 校验 token，返回用户信息 dict
         """
         try:
-            resp = await self.client.get(f"{settings.SSO_BASE_URL}/auth/validate", params={"token": token})
-        except httpx.RequestError:
+            print(f"Validating token with URL: {settings.SSO_BASE_URL}/auth/check-token")
+            print(f"Token: {token[:20]}...")
+            resp = await self.client.get(f"{settings.SSO_BASE_URL}/auth/check-token", params={"token": token})
+            print(f"Response status: {resp.status_code}")
+            print(f"Response body: {resp.text}")
+        except httpx.RequestError as e:
+            print(f"Request error: {str(e)}")
             raise Exception("SSO service unavailable")
 
         if resp.status_code != 200:
