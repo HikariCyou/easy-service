@@ -5,6 +5,7 @@ from tortoise.transactions import in_transaction
 
 from app.models.personnel import Personnel, PersonnelSkill, EmployeeDetail, FreelancerDetail, BPEmployeeDetail
 from app.models.skill import Skill
+from app.models.contract import Contract
 from app.models.enums import PersonType
 from app.utils.common import clean_dict
 
@@ -254,7 +255,7 @@ class PersonnelController:
                 query = query.filter(bp_employee_detail__bp_company_id=search_params['bp_company_id'])
 
         total = await query.count()
-        personnel_list = await query.prefetch_related('bp_employee_detail', 'bp_employee_detail__bp_company', 'skills__skill').order_by('-updated_at').limit(page_size).offset((page - 1) * page_size).all()
+        personnel_list = await query.prefetch_related('bp_employee_detail', 'bp_employee_detail__bp_company', 'skills__skill', 'contracts', 'contracts__case').order_by('-updated_at').limit(page_size).offset((page - 1) * page_size).all()
         
         # Detail情報付きの辞書リストに変換
         result_data = []
@@ -450,6 +451,33 @@ class PersonnelController:
                 skill_dict['skill_category'] = ps.skill.category
                 skills_data.append(skill_dict)
             data['skills'] = skills_data
+            
+            # 现在有效契约信息を追加（一つだけ返す）
+            current_date = date.today()
+            current_contract = None
+            
+            # contracts がある場合、現在有効な契約を検索
+            contracts = await personnel.contracts.filter(
+                contract_start_date__lte=current_date,
+                contract_end_date__gte=current_date,
+                status='有効'
+            ).prefetch_related('case', 'calculation_items').all()
+            
+            if contracts:
+                current_contract = contracts[0]  # 最初の有効契約を取得
+            
+            if current_contract:
+                contract_data = await current_contract.to_dict()
+                # 関連する案件情報も含める
+                if current_contract.case:
+                    case_data = await current_contract.case.to_dict()
+                    contract_data['case'] = case_data
+                # 契約精算項目も含める
+                calculation_items = await current_contract.calculation_items.all()
+                contract_data['calculation_items'] = [await item.to_dict() for item in calculation_items]
+                data['current_contract'] = contract_data
+            else:
+                data['current_contract'] = None
         
         return data
 

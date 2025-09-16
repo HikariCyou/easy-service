@@ -13,6 +13,7 @@ from .evaluation import router as evaluation_router
 from .freelancer import router as freelancer_router
 from .ip import ip_router
 from .bank import bank_router
+from .order import router as order_router
 
 v1_router = APIRouter()
 
@@ -27,3 +28,4 @@ v1_router.include_router(evaluation_router, prefix="/evaluation", tags=["統一�
 v1_router.include_router(freelancer_router, prefix="/freelancer", tags=["フリーランサー管理"], dependencies=[DependAuth])
 v1_router.include_router(ip_router, prefix="/ip", tags=["要員管理"], dependencies=[DependAuth])
 v1_router.include_router(bank_router, prefix="/bank", tags=["銀行口座管理"], dependencies=[DependAuth])
+v1_router.include_router(order_router, prefix="/order", tags=["注文書管理"], dependencies=[DependAuth])

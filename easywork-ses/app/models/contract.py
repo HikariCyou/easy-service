@@ -117,7 +117,7 @@ class Contract(BaseModel, TimestampMixin):
         hourly_rate = 0.0
         
         for item in calculation_items:
-            if item.item_type == "BASIC_SALARY":
+            if item.item_type == ContractItemType.BASIC_SALARY.value:
                 base_salary_item = item
                 # 基本給から時間単価を計算
                 base_salary_amount = item.calculate_monthly_amount(actual_hours, 0)
@@ -154,7 +154,7 @@ class Contract(BaseModel, TimestampMixin):
         # その他の契約項目からの計算（手当・控除項目）
         for item in calculation_items:
             # 基本給は既に処理済みなのでスキップ
-            if item.item_type == "BASIC_SALARY":
+            if item.item_type == ContractItemType.BASIC_SALARY.value:
                 continue
                 
             monthly_amount = item.calculate_monthly_amount(actual_hours, hourly_rate)
@@ -268,7 +268,7 @@ class Contract(BaseModel, TimestampMixin):
         
         if new_base_salary is not None:
             # 基本給項目を更新
-            base_salary_item = await self.calculation_items.filter(item_type="BASIC_SALARY").first()
+            base_salary_item = await self.calculation_items.filter(item_type=ContractItemType.BASIC_SALARY.value).first()
             if base_salary_item:
                 before_values["base_salary"] = str(base_salary_item.amount)
                 base_salary_item.amount = new_base_salary
@@ -440,7 +440,7 @@ class ContractCalculationItem(BaseModel, TimestampMixin):
     
     # 項目基本情報
     item_name = fields.CharField(max_length=100, description="項目名称")  # 交通費、住宅手当等
-    item_type = fields.CharEnumField(ContractItemType, description="項目種別")
+    item_type = fields.CharEnumField(ContractItemType, max_length=10, description="項目種別")
     
     # 金額・単位情報
     amount = fields.FloatField(description="金額")

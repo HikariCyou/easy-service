@@ -9,3 +9,4 @@ from .personnel import *
 from .skill import *
 from .storage import *
 from .bank import *
+from .order import *

@@ -7,7 +7,7 @@ from tortoise.transactions import in_transaction
 from app.models import ContractStatus
 from app.models.personnel import Personnel
 from app.models.evaluation import PersonEvaluation
-from app.models.enums import PersonType
+from app.models.enums import PersonType, ContractItemType
 from app.models.case import Case
 from app.models.contract import Contract
 from app.schemas.import_person import (
@@ -142,7 +142,7 @@ class ImportPersonController:
         # 获取契约履歴
         query =  Contract.filter(
             personnel=personnel
-        ).prefetch_related('case', 'case__client_company')
+        ).prefetch_related('case', 'case__client_company', 'calculation_items')
 
         contracts = await  query.order_by('-contract_start_date').limit(page_size).offset((page - 1) * page_size).all()
         total = await query.count()
@@ -168,7 +168,7 @@ class ImportPersonController:
                 contract_number=contract.contract_number,
                 contract_start_date=contract.contract_start_date,
                 contract_end_date=contract.contract_end_date,
-                unit_price=self._decimal_to_float(contract.unit_price),
+                unit_price=await self._get_basic_unit_price(contract),
                 status=contract.status.value if contract.status else None,
                 client_name=getattr(getattr(contract.case, 'client_company', None), 'company_name', None) if contract.case else None,
                 project_description=getattr(contract.case, 'description', None),
@@ -193,7 +193,7 @@ class ImportPersonController:
             contract_start_date__lte=current_date,
             contract_end_date__gte=current_date,
             status='active'
-        ).prefetch_related('case').first()
+        ).prefetch_related('case', 'calculation_items').first()
 
         if not current_contract:
             return None
@@ -203,7 +203,7 @@ class ImportPersonController:
             client_company=getattr(current_contract.case, 'client_company', None),
             contract_start_date=current_contract.contract_start_date,
             contract_end_date=current_contract.contract_end_date,
-            unit_price=self._decimal_to_float(current_contract.unit_price),
+            unit_price=await self._get_basic_unit_price(current_contract),
             working_hours=self._decimal_to_float(current_contract.standard_working_hours),
             location=getattr(current_contract.case, 'location', None),
             status=current_contract.status,
@@ -272,6 +272,24 @@ class ImportPersonController:
 
     # ===== 内部辅助方法 =====
     
+    async def _get_basic_unit_price(self, contract: Contract) -> Optional[float]:
+        """从契约精算项目中获取基本给（单价）"""
+        if not hasattr(contract, 'calculation_items'):
+            return None
+            
+        # 查找基本给项目
+        for item in contract.calculation_items:
+            # 基本给通常是 BASIC_SALARY 类型
+            if hasattr(item, 'item_type') and item.item_type == ContractItemType.BASIC_SALARY.value:
+                return self._decimal_to_float(item.amount)
+        
+        # 如果没有找到基本给，返回第一个项目的金额（兼容性处理）
+        if contract.calculation_items:
+            first_item = contract.calculation_items[0]
+            return self._decimal_to_float(first_item.amount)
+            
+        return None
+
     async def _get_visa_expiring_personnel(self, days: int = 90) -> List[Personnel]:
         """获取签证即将到期的人员"""
         expiry_date = date.today() + timedelta(days=days)
@@ -377,7 +395,8 @@ class ImportPersonController:
 
         # 将特化信息添加到base_schema中
         base_schema.update({
-            "specialized_info": specialized_info
+            "specialized_info": specialized_info,
+            "current_age": personnel.current_age,
         })
         
         return ImportPersonDetailSchema(**base_schema)

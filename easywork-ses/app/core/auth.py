@@ -15,8 +15,8 @@ class AuthClient:
             print(f"Validating token with URL: {settings.SSO_BASE_URL}/auth/check-token")
             print(f"Token: {token[:20]}...")
             resp = await self.client.get(f"{settings.SSO_BASE_URL}/auth/check-token", params={"token": token})
-            print(f"Response status: {resp.status_code}")
-            print(f"Response body: {resp.text}")
+            # print(f"Response status: {resp.status_code}")
+            # print(f"Response body: {resp.text}")
         except httpx.RequestError as e:
             print(f"Request error: {str(e)}")
             raise Exception("SSO service unavailable")

@@ -17,3 +17,6 @@ db.sqlite3-wal
 .pdf
 static/*.pdf
 .jar
+.env
+.env.local
+.env.*.local
