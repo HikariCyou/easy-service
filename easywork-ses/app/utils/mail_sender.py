@@ -11,8 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class MailSender:
-    """完全模拟Django EmailMultiAlternatives的实现"""
-
     def __init__(self):
         # 完全按照Django配置
         self.smtp_server = "m32.coreserver.jp"
@@ -21,10 +19,8 @@ class MailSender:
         self.password = "tob1234"
         self.from_email = "tobprint@tob.co.jp"
         self.use_ssl = True
-        print(f"!!! MailSender初始化: {self.smtp_server}:{self.smtp_port}")
 
     def get_connection(self):
-        """模拟Django get_connection()"""
         if self.use_ssl:
             connection = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
         else:
@@ -34,16 +30,14 @@ class MailSender:
         connection.login(self.username, self.password)
         return connection
 
-    def send_simple_email(self, to_email: str, subject: str, body: str):
-        """完全模拟Java hutool MailUtil的发送方式"""
-        print(f"!!! 发送简单邮件到: {to_email}")
-
+    def send_simple_email(self, to_email: str, subject: str, body: str, is_html: bool = True):
         try:
             # 获取连接
             connection = self.get_connection()
 
-            # 完全按照Java MailUtil的方式创建邮件
-            msg = MIMEText(body, 'plain', 'utf-8')
+            # 默认发送HTML邮件，支持富文本格式
+            content_type = 'html' if is_html else 'plain'
+            msg = MIMEText(body, content_type, 'utf-8')
 
             # 关键：设置所有必要的邮件头，模拟Java MailUtil
             msg['Subject'] = subject  # 不要Header编码，直接使用
@@ -53,15 +47,11 @@ class MailSender:
             msg['Message-ID'] = utils.make_msgid()
 
             # 发送
-            print(f"!!! 邮件内容预览:\n{msg.as_string()[:500]}...")
             connection.sendmail(self.from_email, [to_email], msg.as_string())
             connection.quit()
-
-            print(f"!!! 邮件发送成功: {to_email}")
             logger.info(f"邮件发送成功: {to_email}")
 
         except Exception as e:
-            print(f"!!! 邮件发送失败: {str(e)}")
             logger.error(f"邮件发送失败: {str(e)}")
             raise
 
@@ -73,20 +63,22 @@ class MailSender:
         html_body: str = None,
         attachment_files: List[tuple] = None,
         cc_emails: List[str] = None,
-        bcc_emails: List[str] = None
+        bcc_emails: List[str] = None,
+        is_html: bool = True
     ):
-        """完整的邮件发送功能 - 支持附件"""
-        print(f"!!! send_email调用: {to_email}, 附件数量: {len(attachment_files) if attachment_files else 0}")
-
         try:
             connection = self.get_connection()
+
+            # 确定邮件内容和类型
+            email_content = html_body or body or "Hello World"
+            content_type = 'html' if (is_html or html_body) else 'plain'
 
             # 如果有附件，使用MIMEMultipart
             if attachment_files:
                 msg = MIMEMultipart()
 
-                # 添加文本内容
-                text_part = MIMEText(body or "Hello World", 'plain', 'utf-8')
+                # 添加文本内容 - 支持HTML格式
+                text_part = MIMEText(email_content, content_type, 'utf-8')
                 msg.attach(text_part)
 
                 # 添加附件 - 完全按照Django方式
@@ -94,7 +86,6 @@ class MailSender:
                     if len(attachment) >= 2:
                         filename = attachment[0]
                         file_content = attachment[1]
-                        content_type = attachment[2] if len(attachment) > 2 else "application/octet-stream"
 
                         # 创建附件
                         part = MIMEBase('application', 'octet-stream')
@@ -109,8 +100,8 @@ class MailSender:
                         )
                         msg.attach(part)
             else:
-                # 没有附件，使用简单文本
-                msg = MIMEText(body or "Hello World", 'plain', 'utf-8')
+                # 没有附件，使用HTML或纯文本
+                msg = MIMEText(email_content, content_type, 'utf-8')
 
             # 设置相同的邮件头 - 保持与工作版本一致
             msg['Subject'] = subject
@@ -128,15 +119,12 @@ class MailSender:
                 recipients.extend(bcc_emails)
 
             # 发送
-            print(f"!!! 邮件大小: {len(msg.as_string())} 字符")
             connection.sendmail(self.from_email, recipients, msg.as_string())
             connection.quit()
 
-            print(f"!!! 邮件发送成功: {to_email}")
             logger.info(f"邮件发送成功: {to_email}")
 
         except Exception as e:
-            print(f"!!! 邮件发送失败: {str(e)}")
             logger.error(f"邮件发送失败: {str(e)}")
             raise
 
@@ -146,32 +134,33 @@ class MailSender:
         attachment_files: List[tuple] = None,
         template_params: Dict[str, Any] = None
     ):
-        """兼容原有接口 - 支持附件"""
-        print(f"!!! send_mail_with_attachments调用: {mail}")
-
         if template_params:
-            subject = template_params.get("subject", "EasyWork邮件")
+            subject = template_params.get("subject", "")
             content = template_params.get("content", "Hello World")
             cc_str = template_params.get("cc", "")
             bcc_str = template_params.get("bcc", "")
+            is_html = template_params.get("is_html", True)  # 默认使用HTML格式
         else:
             subject = "EasyWork邮件"
-            content = "Hello World"
+            content = "<h1>Hello World</h1><p>这是来自EasyWork系统的邮件</p>"
             cc_str = ""
             bcc_str = ""
+            is_html = True
 
         # 解析抄送邮箱
         cc_emails = [email.strip() for email in cc_str.split(",") if email.strip()] if cc_str else None
         bcc_emails = [email.strip() for email in bcc_str.split(",") if email.strip()] if bcc_str else None
 
-        # 调用完整的send_email方法
+        # 调用完整的send_email方法，默认发送HTML邮件
         self.send_email(
             to_email=mail,
             subject=subject,
-            body=content,
+            html_body=content if is_html else None,
+            body=content if not is_html else None,
             attachment_files=attachment_files,
             cc_emails=cc_emails,
-            bcc_emails=bcc_emails
+            bcc_emails=bcc_emails,
+            is_html=is_html
         )
 
 
@@ -181,15 +170,33 @@ mail_sender = MailSender()
 
 # 测试函数
 def test_simple_mail():
-    """最简单的邮件测试"""
+    """HTML邮件测试"""
     try:
-        print("=== 开始最简单邮件测试 ===")
+        print("=== 开始HTML邮件测试 ===")
+        html_content = """
+        <html>
+        <body>
+            <h1 style="color: #333;">EasyWork 系统通知</h1>
+            <p>这是一封<strong>HTML格式</strong>的测试邮件。</p>
+            <ul>
+                <li>支持<em>富文本</em>格式</li>
+                <li>支持<span style="color: red;">颜色</span>样式</li>
+                <li>支持链接：<a href="https://www.example.com">点击这里</a></li>
+            </ul>
+            <hr>
+            <p style="font-size: 12px; color: #666;">
+                这是由 EasyWork 系统自动发送的邮件。
+            </p>
+        </body>
+        </html>
+        """
         mail_sender.send_simple_email(
             to_email="742525070@qq.com",
-            subject="Hello World",
-            body="这是最简单的测试邮件"
+            subject="HTML邮件测试",
+            body=html_content,
+            is_html=True
         )
-        print("=== 测试成功 ===")
+        print("=== HTML邮件测试成功 ===")
     except Exception as e:
         print(f"=== 测试失败: {e} ===")
         import traceback
@@ -197,23 +204,44 @@ def test_simple_mail():
 
 
 def test_attachment_mail():
-    """带附件的邮件测试"""
+    """带附件的HTML邮件测试"""
     try:
-        print("=== 开始附件邮件测试 ===")
+        print("=== 开始HTML附件邮件测试 ===")
 
         # 创建测试附件
         test_content = "这是测试附件内容".encode('utf-8')
         attachment_files = [
-            ("测试文件.txt", test_content, "text/plain")
+            ("测试文件.txt", test_content)
         ]
+
+        # HTML邮件内容
+        html_content = """
+        <html>
+        <body>
+            <h2 style="color: #2e7d32;">附件邮件测试</h2>
+            <p>这是一封带有<strong>HTML格式</strong>和<strong>附件</strong>的测试邮件。</p>
+            <div style="background-color: #f5f5f5; padding: 10px; border-left: 4px solid #2e7d32;">
+                <p><strong>附件信息：</strong></p>
+                <ul>
+                    <li>文件名：测试文件.txt</li>
+                    <li>文件类型：文本文件</li>
+                </ul>
+            </div>
+            <p style="margin-top: 20px; color: #666;">
+                请查收附件内容。
+            </p>
+        </body>
+        </html>
+        """
 
         mail_sender.send_email(
             to_email="742525070@qq.com",
-            subject="附件测试邮件",
-            body="这是带附件的测试邮件",
-            attachment_files=attachment_files
+            subject="HTML附件测试邮件",
+            html_body=html_content,
+            attachment_files=attachment_files,
+            is_html=True
         )
-        print("=== 附件测试成功 ===")
+        print("=== HTML附件测试成功 ===")
     except Exception as e:
         print(f"=== 附件测试失败: {e} ===")
         import traceback

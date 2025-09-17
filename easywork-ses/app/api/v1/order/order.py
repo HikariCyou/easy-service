@@ -403,8 +403,6 @@ async def send_order_mail(
                 # 即使附件失败也继续发送邮件，只记录错误
 
         # 发送主邮件
-        print(f"!!! 准备发送邮件到: {request.to}")
-        print(f"!!! 附件数量: {len(attachment_files)}")
         await mail_sender.send_mail_with_attachments(
             mail=request.to,
             attachment_files=attachment_files,

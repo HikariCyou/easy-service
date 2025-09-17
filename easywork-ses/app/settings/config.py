@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     DOMAIN_HOST: str = "etalk.tob.co.jp"
 
     # External Service URLs
-    # SSO_BASE_URL: str = "http://13.158.219.191:8081/admin-api/system"
-    # PROCESS_BASE_URL: str = "http://13.158.219.191:8081/admin-api/bpm/starter"
+    SSO_BASE_URL: str = "http://13.158.219.191:8081/admin-api/system"
+    PROCESS_BASE_URL: str = "http://13.158.219.191:8081/admin-api/bpm/starter"
 
-    SSO_BASE_URL: str = "http://localhost:48080/admin-api/system"
-    PROCESS_BASE_URL: str = "http://localhost:48080/admin-api/bpm/starter"
+    # SSO_BASE_URL: str = "http://localhost:48080/admin-api/system"
+    # PROCESS_BASE_URL: str = "http://localhost:48080/admin-api/bpm/starter"
 
     TORTOISE_ORM: dict = {
         "connections": {
