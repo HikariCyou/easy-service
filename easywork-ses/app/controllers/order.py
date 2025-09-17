@@ -187,6 +187,7 @@ class OrderController:
                 "year_month": detail["year_month"],
                 "year_month_display": detail["year_month_display"],
                 "bp_company_name": detail["bp_company_name"],
+                "bp_company_id": detail["bp_company_id"],
                 "personnel_name": detail["personnel_name"],
                 "case_title": detail["case_title"],
                 "sales_representative_name": detail["sales_representative_name"],

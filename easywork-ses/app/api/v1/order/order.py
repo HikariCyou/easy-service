@@ -366,7 +366,6 @@ async def get_order_mail_template(
 async def send_order_mail(
     order_id: int,
     request: SendMailRequest,
-    authorization: Optional[str] = Header(None),
 ):
     """发送注文書邮件给BP公司"""
     try:
@@ -424,6 +423,10 @@ async def send_order_mail(
         #             "content": request.password_content
         #         }
         #     )
+
+        # 邮件发送成功后，更新注文書状态为已发送
+        order.status = OrderStatus.SENT
+        await order.save()
 
         return Success(data={
             "message": "邮件发送成功",

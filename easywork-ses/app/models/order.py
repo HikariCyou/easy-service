@@ -144,6 +144,7 @@ class Order(BaseModel, TimestampMixin):
             
             # 関連情報
             "bp_company_name": bp_company.name if bp_company else "",
+            "bp_company_id": bp_company.id,
             "personnel_name": personnel.name if personnel else "",
             "case_title": case.title if case else "",
             "sales_representative_name": sales_rep.name if sales_rep else "",
