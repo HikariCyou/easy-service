@@ -230,15 +230,6 @@ class OrderGenerationRequest(BaseModel):
         return v
 
 
-class OrderGenerationResponse(BaseModel):
-    """注文書生成レスポンススキーマ"""
-    success: bool
-    message: str
-    generated_count: int
-    skipped_count: int
-    error_count: int
-    order_ids: List[int]
-    errors: List[str] = Field(default_factory=list)
 
 
 class OrderSendRequest(BaseModel):
@@ -246,11 +237,3 @@ class OrderSendRequest(BaseModel):
     order_ids: List[int] = Field(..., description="送信対象注文書IDリスト")
     sent_by: str = Field(..., description="送信者名")
 
-
-class OrderSendResponse(BaseModel):
-    """注文書送信レスポンススキーマ"""
-    success: bool
-    message: str
-    sent_count: int
-    failed_count: int
-    errors: List[str] = Field(default_factory=list)

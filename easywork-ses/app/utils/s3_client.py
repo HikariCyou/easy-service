@@ -3,6 +3,10 @@ import os
 from typing import Optional, BinaryIO
 from botocore.exceptions import ClientError, NoCredentialsError
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -190,11 +194,11 @@ class S3Client:
     async def get_presigned_url(self, s3_key: str, expiration: int = 3600) -> str:
         """
         署名付きURLを生成
-        
+
         Args:
             s3_key: S3オブジェクトキー
             expiration: URL有効期限（秒）
-            
+
         Returns:
             署名付きURL
         """
@@ -212,10 +216,37 @@ class S3Client:
                     ExpiresIn=expiration
                 )
                 return url
-                
+
         except ClientError as e:
             logger.error(f"署名付きURL生成エラー: {str(e)}")
             raise
+
+    async def get_file_content(self, s3_key: str) -> Optional[bytes]:
+        """
+        S3からファイル内容を取得（メモリ上で）
+
+        Args:
+            s3_key: S3オブジェクトキー
+
+        Returns:
+            ファイル内容のバイト列、取得失敗時はNone
+        """
+        try:
+            async with self.session.client(
+                's3',
+                region_name=self.region,
+                endpoint_url=self.endpoint_url,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key
+            ) as s3:
+                response = await s3.get_object(Bucket=self.bucket_name, Key=s3_key)
+                file_content = await response['Body'].read()
+                logger.info(f"ファイル内容取得成功: {s3_key}, サイズ: {len(file_content)} bytes")
+                return file_content
+
+        except ClientError as e:
+            logger.error(f"S3ファイル内容取得エラー: {str(e)}")
+            return None
 
 
 # グローバルインスタンス

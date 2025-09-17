@@ -1,6 +1,7 @@
 import os
 import typing
-
+from dotenv import load_dotenv
+load_dotenv()
 from pydantic_settings import BaseSettings
 
 
@@ -100,6 +101,15 @@ class Settings(BaseSettings):
         "timezone": "Asia/Tokyo",  # Timezone setting
     }
     DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+
+    # SMTP Email Configuration
+    SMTP_SERVER: str = "m32.coreserver.jp"
+    SMTP_PORT: int = 465
+    SMTP_USE_SSL: bool = True
+    SMTP_USERNAME: str = "tobprint@tob.co.jp"
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: str = "tobprint@tob.co.jp"
+    SMTP_FROM_NAME: str = "EasyWork SES System"
 
 
 settings = Settings()

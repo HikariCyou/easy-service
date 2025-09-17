@@ -1,17 +1,23 @@
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Header
 from fastapi.responses import JSONResponse
+import logging
 
 from app.controllers.order import OrderController, OrderBatchController
+from app.controllers.mail import MailController
+from app.utils.mail_sender import mail_sender
+from app.utils.s3_client import s3_client
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderDetail, OrderListItem,
-    OrderBatchCreate, OrderBatchDetail, OrderGenerationRequest, OrderGenerationResponse,
-    OrderSendRequest, OrderSendResponse, OrderStatusUpdate
+    OrderBatchCreate, OrderBatchDetail, OrderGenerationRequest,
+    OrderSendRequest, OrderStatusUpdate
 )
+from app.schemas.mail import MailTemplateRequest, SendMailRequest
 from app.schemas import Success, Fail
-from app.models.enums import ApproveStatus
+from app.models.enums import ApproveStatus, OrderStatus
 from app.core.ctx import CTX_USER_ID
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -123,7 +129,7 @@ async def generate_orders(
     """指定月の注文書を一括生成する"""
     try:
         response = await OrderController.generate_orders_for_month(request)
-        return Success(data=response.dict())
+        return Success(data=response)
     except Exception as e:
         return Fail(msg=f"注文書生成でエラーが発生しました: {str(e)}")
 
@@ -135,7 +141,7 @@ async def send_orders(
     """注文書を一括送信する"""
     try:
         response = await OrderController.send_orders(request)
-        return Success(data=response.dict())
+        return Success(data=response)
     except Exception as e:
         return Fail(msg=f"注文書送信でエラーが発生しました: {str(e)}")
 
@@ -175,6 +181,25 @@ async def mark_order_collected(
         return Fail(msg=str(e))
     except Exception as e:
         return Fail(msg=f"回収完了処理でエラーが発生しました: {str(e)}")
+
+
+@router.put("/{order_id}/status", summary="注文書ステータス変更")
+async def update_order_status(
+    order_id: int,
+    status: OrderStatus,
+):
+    """注文書のステータスを変更する"""
+    try:
+        order = await OrderController.get_order_by_id(order_id)
+        if not order:
+            return Fail(msg="注文書が見つかりません")
+        
+        order.status = status
+        await order.save()
+        
+        return Success(data={"message": f"注文書ステータスを{status.value}に変更しました"})
+    except Exception as e:
+        return Fail(msg=f"ステータス変更でエラーが発生しました: {str(e)}")
 
 
 # バッチ処理関連のエンドポイント
@@ -317,3 +342,94 @@ async def get_monthly_statistics(
         return Success(data=statistics)
     except Exception as e:
         return Fail(msg=f"統計情報取得でエラーが発生しました: {str(e)}")
+
+
+@router.get("/mail-template", summary="注文書邮件模板获取")
+async def get_order_mail_template(
+    template_id: Optional[int] = Query(None, description="模板ID"),
+    order_id: Optional[int] = Query(None, description="注文書ID"),
+    authorization: Optional[str] = Header(None),
+):
+    """获取填充后的注文書邮件模板"""
+    try:
+        result = await MailController.get_filled_template(
+            template_id=template_id,
+            order_id=order_id,
+            token=authorization
+        )
+        return Success(data=result)
+    except Exception as e:
+        return Fail(msg=f"邮件模板获取でエラーが発生しました: {str(e)}")
+
+
+@router.post("/{order_id}/send-mail", summary="注文書邮件发送")
+async def send_order_mail(
+    order_id: int,
+    request: SendMailRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """发送注文書邮件给BP公司"""
+    try:
+        # 获取注文書信息
+        order = await OrderController.get_order_by_id(order_id)
+        if not order:
+            return Fail(msg="注文書が見つかりません")
+
+        # 准备附件 - 从S3下载PDF文件
+        attachment_files = []
+        if order.order_document_url:
+            try:
+                # 从S3 URL提取key
+                if "amazonaws.com/" in order.order_document_url:
+                    s3_key = order.order_document_url.split("amazonaws.com/")[-1].split("?")[0]
+                elif "s3." in order.order_document_url and "/" in order.order_document_url:
+                    # 处理其他S3 URL格式
+                    url_parts = order.order_document_url.split("/")
+                    bucket_and_key = "/".join(url_parts[3:])  # 跳过 https://bucket.s3.region/
+                    s3_key = bucket_and_key
+                else:
+                    # 假设直接是key
+                    s3_key = order.order_document_url
+
+                # 从S3获取文件内容
+                file_content = await s3_client.get_file_content(s3_key)
+                if file_content:
+                    # 生成文件名
+                    filename = f"注文書_{order_id}_{order.year_month.replace('-', '')}.pdf"
+                    attachment_files.append((filename, file_content, "application/pdf"))
+
+            except Exception as e:
+                logger.error(f"S3ファイル取得エラー: {str(e)}")
+                # 即使附件失败也继续发送邮件，只记录错误
+
+        # 发送主邮件
+        print(f"!!! 准备发送邮件到: {request.to}")
+        print(f"!!! 附件数量: {len(attachment_files)}")
+        await mail_sender.send_mail_with_attachments(
+            mail=request.to,
+            attachment_files=attachment_files,
+            template_params={
+                "subject": request.subject,
+                "content": request.content,
+                "cc": ",".join(request.cc) if request.cc else "",
+                "bcc": ",".join(request.bcc) if request.bcc else ""
+            }
+        )
+
+        # 如果有密码邮件内容，发送密码邮件
+        # if request.password_subject and request.password_content:
+        #     await mail_sender.send_mail_with_attachments(
+        #         mail=request.to,
+        #         attachment_files=None,
+        #         template_params={
+        #             "subject": request.password_subject,
+        #             "content": request.password_content
+        #         }
+        #     )
+
+        return Success(data={
+            "message": "邮件发送成功",
+            "attachment_count": len(attachment_files)
+        })
+    except Exception as e:
+        return Fail(msg=f"邮件发送でエラーが発生しました: {str(e)}")

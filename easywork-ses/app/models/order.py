@@ -2,7 +2,7 @@ from datetime import datetime
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import ApproveStatus, ContractItemType
+from app.models.enums import OrderStatus, ApproveStatus, ContractItemType
 
 
 class Order(BaseModel, TimestampMixin):
@@ -34,10 +34,9 @@ class Order(BaseModel, TimestampMixin):
     order_request_url = fields.CharField(max_length=500, null=True, description="注文請書PDF URL")
     
     # ステータス管理
-    status = fields.CharEnumField(ApproveStatus, default=ApproveStatus.DRAFT, description="ステータス")
+    status = fields.CharEnumField(OrderStatus, default=OrderStatus.DRAFT, description="ステータス")
     
     # 回収管理
-    is_collected = fields.BooleanField(default=False, description="回収完了フラグ")
     collected_date = fields.DatetimeField(null=True, description="回収日時")
     
     # 送信管理
@@ -62,7 +61,12 @@ class Order(BaseModel, TimestampMixin):
     @property
     def is_sent(self) -> bool:
         """送信済みかどうか"""
-        return self.sent_date is not None
+        return self.status in [OrderStatus.SENT, OrderStatus.COLLECTED]
+    
+    @property
+    def is_collected(self) -> bool:
+        """回収済みかどうか"""
+        return self.status == OrderStatus.COLLECTED
     
     def get_year_month_display(self) -> str:
         """年月表示用（2024年1月形式）"""
@@ -77,14 +81,13 @@ class Order(BaseModel, TimestampMixin):
         """送信済みマーク"""
         self.sent_date = datetime.now()
         self.sent_by = sent_by
-        self.status = ApproveStatus.PENDING
+        self.status = OrderStatus.SENT
         await self.save()
     
     async def mark_as_collected(self):
         """回収完了マーク"""
-        self.is_collected = True
         self.collected_date = datetime.now()
-        self.status = ApproveStatus.APPROVED
+        self.status = OrderStatus.COLLECTED
         await self.save()
 
     async def get_bp_company(self):

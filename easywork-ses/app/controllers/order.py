@@ -11,11 +11,11 @@ from app.models.order import Order, OrderBatch
 from app.models.personnel import Personnel
 from app.models.case import Case
 from app.models.contract import Contract
-from app.models.enums import ContractStatus, PersonType, ApproveStatus, ContractItemType
+from app.models.enums import ContractStatus, PersonType, ApproveStatus, ContractItemType, OrderStatus
 from app.schemas.order import (
     OrderCreate, OrderUpdate, OrderDetail, OrderListItem,
-    OrderBatchCreate, OrderBatchDetail, OrderGenerationRequest, OrderGenerationResponse,
-    OrderSendRequest, OrderSendResponse
+    OrderBatchCreate, OrderBatchDetail, OrderGenerationRequest,
+    OrderSendRequest
 )
 from app.settings import settings
 from app.utils.s3_client import s3_client
@@ -203,88 +203,59 @@ class OrderController:
         }
 
     @staticmethod
-    async def generate_orders_for_month(request: OrderGenerationRequest) -> OrderGenerationResponse:
+    async def generate_orders_for_month(request: OrderGenerationRequest):
         """月度注文書一括生成"""
-        generated_count = 0
-        skipped_count = 0
-        error_count = 0
-        order_ids = []
-        errors = []
+        orders = []
         
-        try:
-            async with in_transaction():
-                # 指定されたBP会社の指定された要員の有効契約を取得
-                contracts = await Contract.filter(
-                    status=ContractStatus.ACTIVE,
-                    personnel_id__in=request.personnel_ids,
-                    personnel__bp_employee_detail__bp_company_id=request.bp_company_id,
-                    personnel__person_type=PersonType.BP_EMPLOYEE
-                ).prefetch_related(
-                    'personnel__bp_employee_detail__bp_company',
-                    'case__company_sales_representative',
-                    'calculation_items'
-                ).all()
-                
-                for contract in contracts:
-                    try:
-                        # 既存チェック
-                        if request.exclude_existing:
-                            existing = await Order.filter(
-                                personnel_id=contract.personnel_id,
-                                year_month=request.year_month
-                            ).exists()
-                            
-                            if existing:
-                                skipped_count += 1
-                                continue
-                        
-                        # 注文書作成
-                        order_number = await OrderController._generate_order_number(request.year_month)
-                        
-                        order = await Order.create(
-                            order_number=order_number,
-                            year_month=request.year_month,
-                            personnel_id=contract.personnel_id,
-                            case_id=contract.case_id,
-                            contract_id=contract.id
-                        )
-                        
-                        # PDF生成とS3アップロード
-                        try:
-                            pdf_url = await OrderController._generate_and_upload_order_pdf(order, contract)
-                            order.order_document_url = pdf_url
-                            await order.save()
-                        except Exception as pdf_error:
-                            errors.append(f"注文書 {order_number} PDF生成失敗: {str(pdf_error)}")
-                        
-                        order_ids.append(order.id)
-                        generated_count += 1
-                        
-                    except Exception as e:
-                        error_count += 1
-                        errors.append(f"要員ID {contract.personnel_id}: {str(e)}")
+        async with in_transaction():
+            # 指定されたBP会社の指定された要員の有効契約を取得
+            contracts = await Contract.filter(
+                status=ContractStatus.ACTIVE,
+                personnel_id__in=request.personnel_ids,
+                personnel__bp_employee_detail__bp_company_id=request.bp_company_id,
+                personnel__person_type=PersonType.BP_EMPLOYEE
+            ).prefetch_related(
+                'personnel__bp_employee_detail__bp_company',
+                'case__company_sales_representative',
+                'calculation_items'
+            ).all()
+            
+            for contract in contracts:
+                # 既存チェック
+                if request.exclude_existing:
+                    existing = await Order.filter(
+                        personnel_id=contract.personnel_id,
+                        year_month=request.year_month
+                    ).exists()
+                    
+                    if existing:
                         continue
                 
-        except Exception as e:
-            return OrderGenerationResponse(
-                success=False,
-                message=f"生成処理でエラーが発生しました: {str(e)}",
-                generated_count=0,
-                skipped_count=0,
-                error_count=1,
-                order_ids=[],
-                errors=[str(e)]
-            )
+                # 注文書作成
+                order_number = await OrderController._generate_order_number(request.year_month)
+                
+                order = await Order.create(
+                    order_number=order_number,
+                    year_month=request.year_month,
+                    personnel_id=contract.personnel_id,
+                    case_id=contract.case_id,
+                    contract_id=contract.id
+                )
+                
+                # PDF生成とS3アップロード
+                pdf_url = await OrderController._generate_and_upload_order_pdf(order, contract)
+                order.order_document_url = pdf_url
+                order.status = OrderStatus.GENERATED  # PDF生成完了で状态変更
+                await order.save()
+                
+                orders.append({
+                    "order_id": order.id,
+                    "order_number": order.order_number,
+                    "personnel_id": contract.personnel_id,
+                    "pdf_url": pdf_url
+                })
         
-        return OrderGenerationResponse(
-            success=True,
-            message=f"注文書生成完了: 生成{generated_count}件、スキップ{skipped_count}件、エラー{error_count}件",
-            generated_count=generated_count,
-            skipped_count=skipped_count,
-            error_count=error_count,
-            order_ids=order_ids,
-            errors=errors
-        )
+        return {"orders": orders}
 
     @staticmethod
     async def _generate_and_upload_order_pdf(order: Order, contract: Contract) -> str:
@@ -295,9 +266,10 @@ class OrderController:
         template = env.get_template("partner_member_order.html")
         
         # 契約詳細情報取得
-        personnel = await contract.personnel.select_related('bp_employee_detail__bp_company').get()
-        bp_company = await personnel.bp_employee_detail.bp_company
-        case = await contract.case.select_related('client_company', 'company_sales_representative').get()
+        personnel = await contract.personnel
+        bp_employee_detail = await personnel.bp_employee_detail
+        bp_company = await bp_employee_detail.bp_company
+        case = await contract.case
         
         # 基本給取得
         basic_salary = 0.0
@@ -320,7 +292,7 @@ class OrderController:
             issuer_address_line2="ACN神保町ビル9階",
             issuer_tel="03-4500-9760",
             issuer_fax="",
-            creator=case.company_sales_representative.name if case.company_sales_representative else "",
+            creator=(await case.company_sales_representative).name if await case.company_sales_representative else "",
             work_name=case.title,
             work_period=work_period,
             responsibility_ko=personnel.name,
@@ -353,7 +325,7 @@ class OrderController:
         return s3_url
 
     @staticmethod
-    async def send_orders(request: OrderSendRequest) -> OrderSendResponse:
+    async def send_orders(request: OrderSendRequest) -> Dict[str, Any]:
         """注文書一括送信"""
         sent_count = 0
         failed_count = 0
@@ -375,13 +347,12 @@ class OrderController:
                 failed_count += 1
                 errors.append(f"注文書 {order.order_number}: {str(e)}")
         
-        return OrderSendResponse(
-            success=failed_count == 0,
-            message=f"送信完了: 成功{sent_count}件、失敗{failed_count}件",
-            sent_count=sent_count,
-            failed_count=failed_count,
-            errors=errors
-        )
+        return {
+            "message": f"送信完了: 成功{sent_count}件、失敗{failed_count}件",
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+            "errors": errors
+        }
 
     @staticmethod
     async def mark_as_collected(order_id: int) -> bool:

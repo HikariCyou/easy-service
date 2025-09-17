@@ -359,6 +359,14 @@ class ApproveStatus(StrEnum):
     WITHDRAWN = "withdrawn"  # 已撤回
 
 
+class OrderStatus(StrEnum):
+    """注文書状态枚举"""
+    DRAFT = "draft"  # 草稿状态
+    GENERATED = "generated"  # 已生成注文书
+    SENT = "sent"  # 已发送邮件
+    COLLECTED = "collected"  # 已回收
+
+
 class WeeklyMoodStatus(StrEnum):
     """週間心情状态枚举"""
     EXCELLENT = "excellent"  # 😄 优秀/非常好
