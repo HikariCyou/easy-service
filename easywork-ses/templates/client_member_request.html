@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ title or "御請求書" }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    html, body {
+      width: 210mm; height: 297mm; margin: 0; padding: 0;
+      font-family: "Noto Sans JP", "Noto Sans CJK JP", "Meiryo", "IPAexGothic", sans-serif;
+      color: #000; font-size: 10px; line-height: 1.4;
+    }
+    .sheet {
+      box-sizing: border-box;
+      width: 210mm;
+      height: 297mm;
+      margin: 0;
+      padding: 15mm;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .seal {
+      width: 50px; /* 减小印章大小 */
+      height: 50px;
+      object-fit: contain;
+      max-width: 50px; /* 确保不会超出 */
+    }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .header-left {
+      width: 65%;
+      font-size: 10px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      padding-bottom: 20px;
+    }
+    .header-right {
+      text-align: right;
+      font-size: 10px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      box-sizing: border-box;
+      padding-bottom: 20px;
+    }
+    .invoice-no { font-weight: 700; }
+
+    .title {
+      text-align: center;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      margin: 16px 0;
+      border-bottom: 2px solid #000;
+      padding-bottom: 4px;
+    }
+
+    .main-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .client-info {
+      width: 45%;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      box-sizing: border-box;
+    }
+    .company-info {
+      width: 52%;
+      text-align: right;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      box-sizing: border-box;
+    }
+    .client-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .request-text {
+      font-size: 10px;
+      margin: 8px 0;
+    }
+    .amount-section {
+      background: #f9f9f9;
+      padding: 8px;
+      border: 1px solid #000;
+      margin: 8px 0;
+    }
+    .amount-label {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .amount-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #000;
+    }
+    .work-period, .payment-due {
+      margin: 6px 0;
+      font-size: 10px;
+    }
+
+    .company-details {
+      font-size: 11px;
+      line-height: 1.6;
+      margin-bottom: 8px;
+      word-break: break-word;
+      max-width: calc(100% - 65px);
+    }
+    .company-name {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 4px 0;
+    }
+    .president-name {
+      font-size: 11px;
+      margin: 4px 0;
+    }
+    .seal-area {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 60px;
+      height: 50px;
+      border: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      color: #999;
+      max-width: 60px;
+      object-fit: contain;
+    }
+
+    table.detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 2px solid #000;
+      font-size: 9px;
+      table-layout: fixed;
+      margin: 12px 0;
+      box-sizing: border-box;
+      word-wrap: break-word;
+    }
+    table.detail-table th, table.detail-table td {
+      border: 1px solid #000;
+      padding: 4px 3px;
+      vertical-align: top;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      text-align: center;
+      box-sizing: border-box;
+      max-width: 0;
+    }
+    table.detail-table th {
+      background: #f4f4f4;
+      font-weight: 700;
+      font-size: 9px;
+    }
+    .col-no { width: 5%; }
+    .col-item { width: 12%; }
+    .col-unit-price { width: 10%; }
+    .col-hours { width: 8%; }
+    .col-rate { width: 6%; }
+    .col-min-max { width: 15%; }
+    .col-shortage { width: 8%; }
+    .col-excess { width: 8%; }
+    .col-other { width: 8%; }
+    .col-amount { width: 12%; }
+    .col-remarks { width: 8%; }
+
+    .subtotal-row {
+      background: #f9f9f9;
+      font-weight: 700;
+    }
+    .total-row {
+      background: #e9e9e9;
+      font-weight: 700;
+    }
+
+    .bank-info {
+      border: 1px solid #000;
+      padding: 8px;
+      margin-top: 12px;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+    .bank-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .adjustment-section {
+      margin: 8px 0;
+    }
+    .adjustment-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    @media print {
+      .sheet {
+        width: 210mm;
+        padding: 15mm;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <!-- 头部信息 -->
+<!--    <div class="header-row">-->
+
+<!--    </div>-->
+
+    <!-- 标题 -->
+    <div class="title">御 請 求 書</div>
+
+    <!-- 主要信息区域 -->
+    <div class="main-section">
+      <div class="client-info">
+        <div class="header-left">
+          〒{{ company_postal_code }}<br />
+          {{ company_address_line1 }}<br />
+          {{ company_address_line2 }}<br />
+          Tel: {{ company_tel }}
+        </div>
+        <div class="client-name">{{ client_company }} 御中</div>
+        <div class="request-text">下記のとおりご請求申し上げます。</div>
+
+        <div class="amount-section">
+          <div class="amount-label">御請求額　：</div>
+          <div class="amount-value">￥{{ total_amount }}円</div>
+        </div>
+
+        <div class="work-period">作業期間　{{ work_start_date }} 〜 {{ work_end_date }}</div>
+        <div class="payment-due">支払期限日　{{ payment_due_date }}</div>
+      </div>
+
+      <div class="company-info">
+
+        <div class="header-right">
+          <div class="invoice-no">請求番号　{{ invoice_number }}</div>
+          <div>発行日　{{ issue_date }}</div>
+          <div>登録番号 {{ registration_number }}</div><br />
+        </div>
+
+        <div class="company-details">
+          〒{{ billing_postal_code }}<br />
+          {{ billing_address }}
+        </div>
+        <div class="company-name">{{ billing_company }}</div>
+        <div class="president-name">{{ president_title }} {{ president_name }}</div>
+        <div class="company-details">TEL: {{ billing_tel }}</div>
+
+        <img
+            class="seal"
+            src="https://etalk.tob.co.jp:9000/jteacher/inkan.png"
+            alt="捺印"
+          />
+      </div>
+    </div>
+
+    <!-- 明细表格 -->
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th class="col-no">番号</th>
+          <th class="col-item">項目</th>
+          <th class="col-unit-price">単価</th>
+          <th class="col-hours">作業Ｈ</th>
+          <th class="col-rate">率</th>
+          <th class="col-min-max">Min/MaxH</th>
+          <th class="col-shortage">減</th>
+          <th class="col-excess">増</th>
+          <th class="col-other">その他</th>
+          <th class="col-amount">金額</th>
+          <th class="col-remarks">備考</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in detail_items %}
+        <tr>
+          <td>{{ item.number }}</td>
+          <td>{{ item.name }}</td>
+          <td>{{ item.unit_price }}</td>
+          <td>{{ item.work_hours }}</td>
+          <td>{{ item.rate }}</td>
+          <td>{{ item.min_max_hours }}</td>
+          <td>{{ item.shortage_rate }}</td>
+          <td>{{ item.excess_rate }}</td>
+          <td>{{ item.other }}</td>
+          <td>{{ item.amount }}</td>
+          <td>{{ item.remarks }}</td>
+        </tr>
+        {% endfor %}
+
+        <!-- 空行填充 -->
+        {% for i in range(8) %}
+        <tr>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+        </tr>
+        {% endfor %}
+
+        <!-- 合计行 -->
+        <tr class="subtotal-row">
+          <td colspan="9">（小計）</td>
+          <td>{{ subtotal_amount }}</td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr>
+          <td colspan="9">（消費税 {{ tax_rate }}%）</td>
+          <td>{{ tax_amount }}</td>
+          <td>&nbsp;</td>
+        </tr>
+        <tr class="total-row">
+          <td colspan="9">（合計）</td>
+          <td>{{ total_amount }}</td>
+          <td>&nbsp;</td>
+        </tr>
+
+        <!-- 调整项目 -->
+        <tr>
+          <td colspan="11" style="text-align: left; padding: 8px;">
+            <div class="adjustment-section">
+              <div class="adjustment-title">[控除、追加]</div>
+              <div>控除　{{ deduction_amount or "" }}</div>
+              <div>追加　{{ addition_amount or "" }}</div>
+            </div>
+          </td>
+        </tr>
+
+        <tr class="total-row">
+          <td colspan="9">（総計）</td>
+          <td>{{ final_total_amount }}</td>
+          <td>&nbsp;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 银行信息 -->
+    <div class="bank-info">
+      <div class="bank-title">お振込銀行口座</div>
+      <div>{{ bank_name }}</div>
+      <div>{{ branch_name }}（{{ branch_code }}）</div>
+      <div>{{ account_type }} {{ account_number }}</div>
+      <div>名義　{{ account_holder }}</div>
+      <div>{{ account_holder_address }}</div>
+      <div>TEL: {{ account_holder_tel }}</div>
+    </div>
+  </div>
+</body>
+</html>

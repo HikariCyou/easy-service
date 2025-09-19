@@ -5,7 +5,7 @@ from fastapi import APIRouter, Query
 from app.controllers.personnel_unified import personnel_controller
 from app.schemas import Fail, Success
 from app.schemas.bp import ActiveBpEmployeeSchema, UpdateBPEmployeeSchema
-from app.schemas.skill import (AddBPEmployeeSkillSchema, UpdateBPEmployeeSkillSchema)
+from app.schemas.skill import AddBPEmployeeSkillSchema, UpdateBPEmployeeSkillSchema
 
 router = APIRouter()
 
@@ -15,7 +15,7 @@ async def get_bp_employees_list(
     page: Optional[int] = Query(1, ge=1),
     pageSize: Optional[int] = Query(10, ge=1, le=100),
     name: Optional[str] = Query(None),
-    bp_company_id: Optional[int] = Query(None)
+    bp_company_id: Optional[int] = Query(None),
 ):
     try:
         search_params = {"name": name} if name else {}
@@ -61,10 +61,10 @@ async def active_bp_employee(schema: ActiveBpEmployeeSchema):
 async def update_bp_employee(bp_employee_data: UpdateBPEmployeeSchema):
     try:
         bp_employee_dict = bp_employee_data.model_dump(exclude_none=True)
-        bp_employee_id = bp_employee_dict.pop('id', None)
+        bp_employee_id = bp_employee_dict.pop("id", None)
         if not bp_employee_id:
             return Fail(msg="要員IDが必要です")
-        
+
         bp_employee = await personnel_controller.update_bp_employee(bp_employee_id, bp_employee_dict)
         if bp_employee:
             data = await bp_employee.to_dict()
@@ -102,17 +102,17 @@ async def get_bp_employee_skills_list(
         bp_employee = await personnel_controller.get_bp_employee_by_id(employee_id)
         if not bp_employee:
             return Fail(msg="要員が見つかりません")
-        
+
         skills, total = await personnel_controller.get_personnel_skills(employee_id, page=page, page_size=pageSize)
-        
+
         # スキルデータを辞書形式に変換
         skills_data = []
         for skill_relation in skills:
             skill_dict = await skill_relation.to_dict()
-            if hasattr(skill_relation, 'skill') and skill_relation.skill:
-                skill_dict['skill'] = await skill_relation.skill.to_dict()
+            if hasattr(skill_relation, "skill") and skill_relation.skill:
+                skill_dict["skill"] = await skill_relation.skill.to_dict()
             skills_data.append(skill_dict)
-        
+
         return Success(data=skills_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -122,15 +122,15 @@ async def get_bp_employee_skills_list(
 async def get_bp_employee_skill(skill_id: int):
     try:
         from app.models.personnel import PersonnelSkill
-        
+
         skill_relation = await PersonnelSkill.get_or_none(id=skill_id).select_related("skill", "personnel")
         if not skill_relation:
             return Fail(msg="スキル記録が見つかりません")
-        
+
         skill_dict = await skill_relation.to_dict()
-        if hasattr(skill_relation, 'skill') and skill_relation.skill:
-            skill_dict['skill'] = await skill_relation.skill.to_dict()
-        
+        if hasattr(skill_relation, "skill") and skill_relation.skill:
+            skill_dict["skill"] = await skill_relation.skill.to_dict()
+
         return Success(data=skill_dict)
     except Exception as e:
         return Fail(msg=str(e))
@@ -140,21 +140,21 @@ async def get_bp_employee_skill(skill_id: int):
 async def add_bp_employee_skill(skill_data: AddBPEmployeeSkillSchema):
     try:
         skill_dict = skill_data.model_dump(exclude_none=True)
-        employee_id = skill_dict.get('employee_id') or skill_dict.get('bp_employee_id')
-        
+        employee_id = skill_dict.get("employee_id") or skill_dict.get("bp_employee_id")
+
         if not employee_id:
             return Fail(msg="要員IDが必要です")
-        
+
         bp_employee = await personnel_controller.get_bp_employee_by_id(employee_id)
         if not bp_employee:
             return Fail(msg="要員が見つかりません")
-        
+
         skill_relation = await personnel_controller.add_personnel_skill(employee_id, skill_dict)
-        
+
         result = await skill_relation.to_dict()
-        if hasattr(skill_relation, 'skill') and skill_relation.skill:
-            result['skill'] = await skill_relation.skill.to_dict()
-        
+        if hasattr(skill_relation, "skill") and skill_relation.skill:
+            result["skill"] = await skill_relation.skill.to_dict()
+
         return Success(msg="スキルを追加しました", data=result)
     except ValueError as e:
         return Fail(msg=str(e))
@@ -166,17 +166,17 @@ async def add_bp_employee_skill(skill_data: AddBPEmployeeSkillSchema):
 async def update_bp_employee_skill(skill_data: UpdateBPEmployeeSkillSchema):
     try:
         skill_dict = skill_data.model_dump(exclude_none=True)
-        skill_id = skill_dict.pop('id', None)
-        
+        skill_id = skill_dict.pop("id", None)
+
         if not skill_id:
             return Fail(msg="スキルIDが必要です")
-        
+
         skill_relation = await personnel_controller.update_personnel_skill(skill_id, skill_dict)
-        
+
         result = await skill_relation.to_dict()
-        if hasattr(skill_relation, 'skill') and skill_relation.skill:
-            result['skill'] = await skill_relation.skill.to_dict()
-        
+        if hasattr(skill_relation, "skill") and skill_relation.skill:
+            result["skill"] = await skill_relation.skill.to_dict()
+
         return Success(msg="スキルを更新しました", data=result)
     except ValueError as e:
         return Fail(msg=str(e))

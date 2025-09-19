@@ -1,9 +1,7 @@
-
 from app.models import EmployeeHistory
 
 
 class HistoryService:
-
     @staticmethod
     async def save_json_history(employee, model_name, data_dict, changed_by=None):
         # 获取最新版本号

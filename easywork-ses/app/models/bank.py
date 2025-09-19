@@ -7,11 +7,11 @@ class Bank(BaseModel, TimestampMixin):
     """
     銀行情報
     """
-    
+
     code = fields.CharField(max_length=10, unique=True, description="銀行コード")
     name = fields.CharField(max_length=100, description="銀行名")
     name_kana = fields.CharField(max_length=100, null=True, description="銀行名カナ")
-    
+
     # 関連
     branches: fields.ReverseRelation["BankBranch"]
 
@@ -24,7 +24,7 @@ class BankBranch(BaseModel, TimestampMixin):
     """
     銀行支店情報
     """
-    
+
     bank = fields.ForeignKeyField("models.Bank", related_name="branches", description="所属銀行")
     code = fields.CharField(max_length=10, description="支店コード")
     name = fields.CharField(max_length=100, description="支店名")
@@ -43,17 +43,17 @@ class BankAccount(BaseModel, TimestampMixin):
     """
     銀行口座情報
     """
-    
+
     # 銀行情報
     bank = fields.ForeignKeyField("models.Bank", related_name="accounts", description="銀行")
     branch = fields.ForeignKeyField("models.BankBranch", related_name="accounts", description="支店")
-    
+
     # 口座情報
     account_type = fields.CharField(max_length=20, default="普通", description="口座種別（普通/当座）")
     account_number = fields.CharField(max_length=20, description="口座番号")
     account_holder = fields.CharField(max_length=100, description="口座名義")
     account_holder_kana = fields.CharField(max_length=100, null=True, description="口座名義カナ")
-    
+
     # 関連情報
     bp_company = fields.ForeignKeyField("models.BPCompany", related_name="bank_accounts", description="所属BP会社")
     is_default = fields.BooleanField(default=False, description="デフォルト口座")
@@ -61,7 +61,7 @@ class BankAccount(BaseModel, TimestampMixin):
 
     # 写し
     copy_url = fields.JSONField(null=True, description="口座写しURL")
-    
+
     remark = fields.TextField(null=True, description="備考")
 
     class Meta:
@@ -80,17 +80,17 @@ class ClientBankAccount(BaseModel, TimestampMixin):
     """
     顧客会社銀行口座情報
     """
-    
+
     # 銀行情報
     bank = fields.ForeignKeyField("models.Bank", related_name="client_accounts", description="銀行")
     branch = fields.ForeignKeyField("models.BankBranch", related_name="client_accounts", description="支店")
-    
+
     # 口座情報
     account_type = fields.CharField(max_length=20, default="普通", description="口座種別（普通/当座）")
     account_number = fields.CharField(max_length=20, description="口座番号")
     account_holder = fields.CharField(max_length=100, description="口座名義")
     account_holder_kana = fields.CharField(max_length=100, null=True, description="口座名義カナ")
-    
+
     # 関連情報
     client_company = fields.ForeignKeyField("models.ClientCompany", related_name="bank_accounts", description="所属顧客会社")
     is_default = fields.BooleanField(default=False, description="デフォルト口座")
@@ -98,7 +98,7 @@ class ClientBankAccount(BaseModel, TimestampMixin):
 
     # 写し
     copy_url = fields.JSONField(null=True, description="口座写しURL")
-    
+
     remark = fields.TextField(null=True, description="備考")
 
     class Meta:

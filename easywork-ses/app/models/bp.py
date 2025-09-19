@@ -1,10 +1,18 @@
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import (AttendanceCalcType, BPCompanyStatus, BPContractStatus,
-                              DecimalProcessingPosition, DecimalProcessingType,
-                              EmploymentStatus, MarriageStatus, PaymentDay,
-                              PaymentSite, SESContractForm)
+from app.models.enums import (
+    AttendanceCalcType,
+    BPCompanyStatus,
+    BPContractStatus,
+    DecimalProcessingPosition,
+    DecimalProcessingType,
+    EmploymentStatus,
+    MarriageStatus,
+    PaymentDay,
+    PaymentSite,
+    SESContractForm,
+)
 
 
 class BPCompany(BaseModel, TimestampMixin):
@@ -40,12 +48,8 @@ class BPCompany(BaseModel, TimestampMixin):
     contract_end_date = fields.DateField(null=True, description="契約終了日")
 
     # 支払い関連
-    payment_site = fields.CharEnumField(
-        PaymentSite, null=True, description="支払いサイト"
-    )
-    payment_day = fields.CharEnumField(
-        PaymentDay, null=True, description="支払い日"
-    )
+    payment_site = fields.CharEnumField(PaymentSite, null=True, description="支払いサイト")
+    payment_day = fields.CharEnumField(PaymentDay, null=True, description="支払い日")
 
     # 出勤計算関連
     attendance_calc_type = fields.IntEnumField(
@@ -54,13 +58,11 @@ class BPCompany(BaseModel, TimestampMixin):
     decimal_processing_type = fields.CharEnumField(
         DecimalProcessingType, default=DecimalProcessingType.ROUND, null=True, description="端数の処理区分"
     )
-    decimal_processing_position = fields.CharEnumField(
-        DecimalProcessingPosition, null=True, description="端数の処理位置"
-    )
+    decimal_processing_position = fields.CharEnumField(DecimalProcessingPosition, null=True, description="端数の処理位置")
 
     rating = fields.IntField(default=0, description="社内評価（1-5）")
     remark = fields.TextField(null=True, description="備考")
-    
+
     # 関連
     employees: fields.ReverseRelation["BPEmployee"]
     sales_representatives: fields.ReverseRelation["BPSalesRepresentative"]
@@ -113,9 +115,7 @@ class BPEmployee(BaseModel, TimestampMixin):
     certifications = fields.TextField(null=True, description="保有資格（改行区切り）")
 
     # 単価
-    standard_unit_price = fields.DecimalField(
-        max_digits=10, decimal_places=0, null=True, description="標準単価（月額）"
-    )
+    standard_unit_price = fields.DecimalField(max_digits=10, decimal_places=0, null=True, description="標準単価（月額）")
     min_unit_price = fields.DecimalField(max_digits=10, decimal_places=0, null=True, description="最低受注単価")
     max_unit_price = fields.DecimalField(max_digits=10, decimal_places=0, null=True, description="最高受注単価")
 
@@ -202,9 +202,7 @@ class BPEmployeeEvaluation(BaseModel, TimestampMixin):
 
     bp_employee = fields.ForeignKeyField("models.BPEmployee", related_name="evaluations", description="対象BP員工")
     case = fields.ForeignKeyField("models.Case", related_name="bp_evaluations", null=True, description="評価対象案件")
-    contract = fields.ForeignKeyField(
-        "models.Contract", related_name="evaluations", null=True, description="評価対象契約"
-    )
+    contract = fields.ForeignKeyField("models.Contract", related_name="evaluations", null=True, description="評価対象契約")
 
     # 評価項目
     technical_skill = fields.IntField(description="技術力 (1-5)")
@@ -237,12 +235,12 @@ class BPSalesRepresentative(BaseModel, TimestampMixin):
 
     # 所属BP会社
     bp_company = fields.ForeignKeyField("models.BPCompany", related_name="sales_representatives", description="所属BP会社")
-    
+
     # 基本情報
     name = fields.CharField(max_length=100, description="氏名")
     name_kana = fields.CharField(max_length=100, null=True, description="氏名（フリーカナ）")
     gender = fields.IntField(null=True, default=0, description="性別 (0:不明, 1:男, 2:女)")
-    
+
     # 連絡先情報
     email = fields.CharField(max_length=100, description="メールアドレス")
     phone = fields.CharField(max_length=50, null=True, description="電話番号")
@@ -250,10 +248,10 @@ class BPSalesRepresentative(BaseModel, TimestampMixin):
     # ステータス
     is_primary = fields.BooleanField(default=False, description="主担当者かどうか")
     is_active = fields.BooleanField(default=True, description="有効フラグ")
-    
+
     # 備考
     remark = fields.TextField(null=True, description="備考")
-    
+
     # 関連
     order_email_configs: fields.ReverseRelation["BPOrderEmailConfig"]
     payment_email_configs: fields.ReverseRelation["BPPaymentEmailConfig"]
@@ -276,29 +274,25 @@ class BPOrderEmailConfig(BaseModel, TimestampMixin):
     BP会社注文書メール送信設定
     注文書送信時の連絡先設定
     """
-    
+
     # 所属BP会社
     bp_company = fields.ForeignKeyField("models.BPCompany", related_name="order_email_configs", description="対象BP会社")
-    
+
     # 設定基本情報
     config_name = fields.CharField(max_length=100, description="設定名称")
     is_default = fields.BooleanField(default=False, description="デフォルト設定かどうか")
     is_active = fields.BooleanField(default=True, description="有効フラグ")
-    
+
     # 送信者（主担当営業）
     sender_sales_rep = fields.ForeignKeyField(
-        "models.BPSalesRepresentative", 
-        related_name="order_email_configs", 
-        description="送信者（BP営業担当者）"
+        "models.BPSalesRepresentative", related_name="order_email_configs", description="送信者（BP営業担当者）"
     )
-    
+
     # CC営業担当者（複数可）
     cc_sales_reps = fields.ManyToManyField(
-        "models.BPSalesRepresentative",
-        related_name="order_email_cc_configs",
-        description="CC営業担当者"
+        "models.BPSalesRepresentative", related_name="order_email_cc_configs", description="CC営業担当者"
     )
-    
+
     # 備考
     remark = fields.TextField(null=True, description="備考")
 
@@ -319,29 +313,25 @@ class BPPaymentEmailConfig(BaseModel, TimestampMixin):
     BP会社支払通知書メール送信設定
     支払通知書送信時の連絡先設定
     """
-    
+
     # 所属BP会社
     bp_company = fields.ForeignKeyField("models.BPCompany", related_name="payment_email_configs", description="対象BP会社")
-    
+
     # 設定基本情報
     config_name = fields.CharField(max_length=100, description="設定名称")
     is_default = fields.BooleanField(default=False, description="デフォルト設定かどうか")
     is_active = fields.BooleanField(default=True, description="有効フラグ")
-    
+
     # 送信者（主担当営業）
     sender_sales_rep = fields.ForeignKeyField(
-        "models.BPSalesRepresentative", 
-        related_name="payment_email_configs", 
-        description="送信者（BP営業担当者）"
+        "models.BPSalesRepresentative", related_name="payment_email_configs", description="送信者（BP営業担当者）"
     )
-    
+
     # CC営業担当者（複数可）
     cc_sales_reps = fields.ManyToManyField(
-        "models.BPSalesRepresentative",
-        related_name="payment_email_cc_configs",
-        description="CC営業担当者"
+        "models.BPSalesRepresentative", related_name="payment_email_cc_configs", description="CC営業担当者"
     )
-    
+
     # 備考
     remark = fields.TextField(null=True, description="備考")
 
@@ -362,26 +352,26 @@ class BPCompanyContract(BaseModel, TimestampMixin):
     BP協力会社との基本契約管理
     BP協力会社と自社との間の基本業務提携契約
     """
-    
+
     # 契約先BP会社
     bp_company = fields.ForeignKeyField("models.BPCompany", related_name="contracts", description="契約先BP会社")
-    
+
     # 契約基本情報
     contract_number = fields.CharField(max_length=50, unique=True, description="契約書番号")
     contract_name = fields.CharField(max_length=200, description="契約名称")
     contract_form = fields.CharEnumField(SESContractForm, description="SES契約形態")
-    
+
     # 契約期間
     contract_start_date = fields.DateField(description="契約開始日")
     contract_end_date = fields.DateField(description="契約終了日")
-    
+
     # 契約ステータス
     status = fields.CharEnumField(BPContractStatus, default=BPContractStatus.ACTIVE, description="契約ステータス")
-    
+
     # 契約文書管理（JSONFieldでファイル情報を保存）
     contract_documents = fields.JSONField(default=list, description="契約書類ファイル情報")
     # JSONField構造例: [{"filename": "contract.pdf", "upload_date": "2024-01-01", "file_path": "/path/to/file", "file_size": 1024, "mime_type": "application/pdf", "description": "基本契約書"}]
-    
+
     # 備考
     remark = fields.TextField(null=True, description="備考")
 
@@ -398,28 +388,30 @@ class BPCompanyContract(BaseModel, TimestampMixin):
     def is_active(self) -> bool:
         """契約が有効かどうか"""
         from datetime import date
+
         today = date.today()
-        
+
         if self.status != BPContractStatus.ACTIVE:
             return False
-            
+
         if today < self.contract_start_date:
             return False
-            
+
         if today > self.contract_end_date:
             return False
-            
+
         return True
 
     @property
     def days_until_expiry(self) -> int:
         """契約終了までの日数"""
         from datetime import date
+
         today = date.today()
-        
+
         if today > self.contract_end_date:
             return 0
-            
+
         return (self.contract_end_date - today).days
 
     @property
@@ -427,23 +419,24 @@ class BPCompanyContract(BaseModel, TimestampMixin):
         """更新通知が必要かどうか（30日前）"""
         return self.days_until_expiry <= 30
 
-    def add_contract_document(self, filename: str, file_path: str, file_size: int, 
-                            mime_type: str, description: str = None) -> None:
+    def add_contract_document(
+        self, filename: str, file_path: str, file_size: int, mime_type: str, description: str = None
+    ) -> None:
         """契約文書を追加"""
         from datetime import datetime
-        
+
         if self.contract_documents is None:
             self.contract_documents = []
-            
+
         document_info = {
             "filename": filename,
             "file_path": file_path,
             "file_size": file_size,
             "mime_type": mime_type,
             "upload_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "description": description or "契約関連文書"
+            "description": description or "契約関連文書",
         }
-        
+
         self.contract_documents.append(document_info)
 
     def get_contract_documents(self) -> list:

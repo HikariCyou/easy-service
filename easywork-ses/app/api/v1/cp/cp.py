@@ -7,11 +7,17 @@ from tortoise.expressions import Q
 from app.controllers.cp import cp_controller
 from app.models.client import ClientContact
 from app.schemas import Fail, Success
-from app.schemas.cp import AddClientCompanySchema, UpdateClientCompanySchema, AddClientSalesRepresentativeSchema, \
-    UpdateClientSalesRepresentativeSchema
 from app.schemas.client import (
-    AddClientBankAccountSchema, UpdateClientBankAccountSchema,
-    AddClientCompanyContractSchema, UpdateClientCompanyContractSchema
+    AddClientBankAccountSchema,
+    AddClientCompanyContractSchema,
+    UpdateClientBankAccountSchema,
+    UpdateClientCompanyContractSchema,
+)
+from app.schemas.cp import (
+    AddClientCompanySchema,
+    AddClientSalesRepresentativeSchema,
+    UpdateClientCompanySchema,
+    UpdateClientSalesRepresentativeSchema,
 )
 
 router = APIRouter()
@@ -75,6 +81,7 @@ async def delete_cp_company(id: Optional[int] = Query(...)):
 
 # ==================== 取り先会社営業担当者関連のAPI ====================
 
+
 @router.get("/sales-rep/list", summary="取り先会社営業担当者一覧取得")
 async def get_client_sales_rep_list(
     client_company_id: Optional[int] = Query(None, description="取り先会社ID"),
@@ -86,7 +93,7 @@ async def get_client_sales_rep_list(
 ):
     try:
         query = ClientContact.all()
-        
+
         if client_company_id is not None:
             query = query.filter(client_company_id=client_company_id)
         if name:
@@ -95,17 +102,17 @@ async def get_client_sales_rep_list(
             query = query.filter(email__icontains=email)
         if is_active is not None:
             query = query.filter(is_active=is_active)
-            
+
         total = await query.count()
         offset = (page - 1) * pageSize
         sales_reps = await query.prefetch_related("client_company").offset(offset).limit(pageSize).all()
-        
+
         data = []
         for rep in sales_reps:
             rep_data = await rep.to_dict()
             rep_data["client_company_name"] = rep.client_company.company_name
             data.append(rep_data)
-        
+
         return Success(data=data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -115,10 +122,10 @@ async def get_client_sales_rep_list(
 async def get_client_sales_rep(id: int = Query(..., description="営業担当者ID")):
     try:
         rep = await ClientContact.get(id=id).prefetch_related("client_company")
-        
+
         data = await rep.to_dict()
         data["client_company_name"] = rep.client_company.company_name
-        
+
         return Success(data=data)
     except DoesNotExist:
         return Fail(msg="営業担当者が見つかりませんでした")
@@ -131,16 +138,17 @@ async def add_client_sales_rep(rep_data: AddClientSalesRepresentativeSchema):
     try:
         # 取り先会社の存在確認
         from app.models.client import ClientCompany
+
         client_company = await ClientCompany.filter(id=rep_data.client_company_id).first()
         if not client_company:
             return Fail(msg="指定された取り先会社が見つかりませんでした")
-        
+
         rep = await ClientContact.create(**rep_data.model_dump())
         created_rep = await ClientContact.get(id=rep.id).prefetch_related("client_company")
-        
+
         data = await created_rep.to_dict()
         data["client_company_name"] = created_rep.client_company.company_name
-        
+
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
@@ -150,17 +158,17 @@ async def add_client_sales_rep(rep_data: AddClientSalesRepresentativeSchema):
 async def update_client_sales_rep(rep_data: UpdateClientSalesRepresentativeSchema):
     try:
         rep = await ClientContact.get(id=rep_data.id)
-        
+
         update_data = rep_data.model_dump(exclude_unset=True, exclude={"id"})
         for field, value in update_data.items():
             setattr(rep, field, value)
-        
+
         await rep.save()
         updated_rep = await ClientContact.get(id=rep.id).prefetch_related("client_company")
-        
+
         data = await updated_rep.to_dict()
         data["client_company_name"] = updated_rep.client_company.company_name
-        
+
         return Success(data=data)
     except DoesNotExist:
         return Fail(msg="営業担当者が見つかりませんでした")
@@ -173,7 +181,7 @@ async def delete_client_sales_rep(id: int = Query(..., description="営業担当
     try:
         rep = await ClientContact.get(id=id)
         await rep.delete()
-        
+
         return Success(msg="営業担当者を削除しました")
     except DoesNotExist:
         return Fail(msg="営業担当者が見つかりませんでした")
@@ -184,22 +192,22 @@ async def delete_client_sales_rep(id: int = Query(..., description="営業担当
 @router.get("/sales-rep/by-company/{client_company_id}", summary="取り先会社の営業担当者取得")
 async def get_sales_reps_by_client_company(client_company_id: int):
     try:
-        reps = await ClientContact.filter(
-            client_company_id=client_company_id, 
-            is_active=True
-        ).all()
-        
+        reps = await ClientContact.filter(client_company_id=client_company_id, is_active=True).all()
+
         data = []
         for rep in reps:
-            rep_data = await rep.to_dict(exclude_fields=["client_company_id", "gender", "is_active", "remark", "created_at", "updated_at"])
+            rep_data = await rep.to_dict(
+                exclude_fields=["client_company_id", "gender", "is_active", "remark", "created_at", "updated_at"]
+            )
             data.append(rep_data)
-        
+
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
 
 
 # ==================== 銀行口座関連のAPI ====================
+
 
 @router.get("/bank-account/list", summary="顧客会社銀行口座一覧取得")
 async def get_client_bank_accounts_list(
@@ -209,14 +217,14 @@ async def get_client_bank_accounts_list(
 ):
     try:
         accounts = await cp_controller.get_bank_accounts_by_company(client_company_id)
-        
+
         data = []
         for account in accounts:
             account_dict = await account.to_dict()
             account_dict["bank_name"] = account.bank.name if account.bank else None
             account_dict["branch_name"] = account.branch.name if account.branch else None
             data.append(account_dict)
-        
+
         return Success(data=data, total=len(data))
     except Exception as e:
         return Fail(msg=str(e))
@@ -259,6 +267,7 @@ async def delete_client_bank_account(id: int = Query(..., description="口座ID"
 
 # ==================== 契約関連のAPI ====================
 
+
 @router.get("/contract/list", summary="顧客会社契約一覧取得")
 async def get_client_contracts_list(
     client_company_id: Optional[int] = Query(None, description="顧客会社ID"),
@@ -269,23 +278,25 @@ async def get_client_contracts_list(
 ):
     try:
         from tortoise.expressions import Q
-        
+
         search = Q()
         if status:
             search &= Q(status=status)
         if contract_form:
             search &= Q(contract_form=contract_form)
-        
+
         contracts, total = await cp_controller.list_client_contracts(
-            page=page, page_size=pageSize, client_company_id=client_company_id, search=search, orders=['-updated_at']
+            page=page, page_size=pageSize, client_company_id=client_company_id, search=search, orders=["-updated_at"]
         )
-        
+
         data = []
         for contract in contracts:
             contract_dict = await contract.to_dict()
-            contract_dict["client_company_name"] = contract.client_company.company_name if contract.client_company else None
+            contract_dict["client_company_name"] = (
+                contract.client_company.company_name if contract.client_company else None
+            )
             data.append(contract_dict)
-        
+
         return Success(data=data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -297,7 +308,9 @@ async def get_client_contract(id: int = Query(..., description="契約ID")):
         contract = await cp_controller.get_contract_by_id(id)
         if contract:
             contract_dict = await contract.to_dict()
-            contract_dict["client_company_name"] = contract.client_company.company_name if contract.client_company else None
+            contract_dict["client_company_name"] = (
+                contract.client_company.company_name if contract.client_company else None
+            )
             return Success(data=contract_dict)
         else:
             return Fail(msg="契約が見つかりませんでした")

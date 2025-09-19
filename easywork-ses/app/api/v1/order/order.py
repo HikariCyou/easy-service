@@ -1,21 +1,28 @@
-from typing import List, Optional
-from fastapi import APIRouter, Query, Header
-from fastapi.responses import JSONResponse
 import logging
+from typing import List, Optional
 
-from app.controllers.order import OrderController, OrderBatchController
+from fastapi import APIRouter, Header, Query
+from fastapi.responses import JSONResponse
+
 from app.controllers.mail import MailController
+from app.controllers.order import OrderBatchController, OrderController
+from app.core.ctx import CTX_USER_ID
+from app.models.enums import ApproveStatus, OrderStatus
+from app.schemas import Fail, Success
+from app.schemas.mail import MailTemplateRequest, SendMailRequest
+from app.schemas.order import (
+    OrderBatchCreate,
+    OrderBatchDetail,
+    OrderCreate,
+    OrderDetail,
+    OrderGenerationRequest,
+    OrderListItem,
+    OrderSendRequest,
+    OrderStatusUpdate,
+    OrderUpdate,
+)
 from app.utils.mail_sender import mail_sender
 from app.utils.s3_client import s3_client
-from app.schemas.order import (
-    OrderCreate, OrderUpdate, OrderDetail, OrderListItem,
-    OrderBatchCreate, OrderBatchDetail, OrderGenerationRequest,
-    OrderSendRequest, OrderStatusUpdate
-)
-from app.schemas.mail import MailTemplateRequest, SendMailRequest
-from app.schemas import Success, Fail
-from app.models.enums import ApproveStatus, OrderStatus
-from app.core.ctx import CTX_USER_ID
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,8 +35,6 @@ async def create_order(order_data: OrderCreate):
         order = await OrderController.create_order(order_data)
         detail = await order.get_full_details()
         detail["id"] = order.id
-        detail["created_at"] = order.created_at
-        detail["updated_at"] = order.updated_at
         return Success(data=detail)
     except ValueError as e:
         return Fail(msg=str(e))
@@ -56,7 +61,7 @@ async def get_orders_list(
             is_sent=is_sent,
             is_collected=is_collected,
             page=page,
-            pageSize=pageSize
+            pageSize=pageSize,
         )
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
@@ -72,12 +77,12 @@ async def get_order_detail(
         detail = await OrderController.get_order_detail(order_id)
         if not detail:
             return Fail(msg="注文書が見つかりません")
-        
+
         order = await OrderController.get_order_by_id(order_id)
         detail["id"] = order.id
         detail["created_at"] = order.created_at
         detail["updated_at"] = order.updated_at
-        
+
         return Success(data=detail)
     except Exception as e:
         return Fail(msg=f"注文書詳細取得でエラーが発生しました: {str(e)}")
@@ -93,7 +98,7 @@ async def update_order(
         order = await OrderController.update_order(order_id, order_data)
         if not order:
             return Fail(msg="注文書が見つかりません")
-        
+
         detail = await order.get_full_details()
         detail["id"] = order.id
         detail["created_at"] = order.created_at
@@ -114,7 +119,7 @@ async def delete_order(
         success = await OrderController.delete_order(order_id)
         if not success:
             return Fail(msg="注文書が見つかりません")
-        
+
         return Success(data={"message": "注文書を削除しました"})
     except ValueError as e:
         return Fail(msg=str(e))
@@ -156,10 +161,10 @@ async def send_single_order(
         order = await OrderController.get_order_by_id(order_id)
         if not order:
             return Fail(msg="注文書が見つかりません")
-        
+
         if order.is_sent:
             return Fail(msg="この注文書は既に送信済みです")
-        
+
         await order.mark_as_sent(sent_by)
         return Success(data={"message": "注文書を送信しました"})
     except Exception as e:
@@ -175,7 +180,7 @@ async def mark_order_collected(
         success = await OrderController.mark_as_collected(order_id)
         if not success:
             return Fail(msg="注文書が見つかりません")
-        
+
         return Success(data={"message": "注文書の回収完了をマークしました"})
     except ValueError as e:
         return Fail(msg=str(e))
@@ -193,10 +198,10 @@ async def update_order_status(
         order = await OrderController.get_order_by_id(order_id)
         if not order:
             return Fail(msg="注文書が見つかりません")
-        
+
         order.status = status
         await order.save()
-        
+
         return Success(data={"message": f"注文書ステータスを{status.value}に変更しました"})
     except Exception as e:
         return Fail(msg=f"ステータス変更でエラーが発生しました: {str(e)}")
@@ -210,8 +215,8 @@ async def create_order_batch(
     """注文書バッチを作成する"""
     try:
         batch = await OrderBatchController.create_batch(batch_data)
-        await batch.fetch_related('orders')
-        
+        await batch.fetch_related("orders")
+
         batch_detail = {
             "id": batch.id,
             "batch_number": batch.batch_number,
@@ -228,7 +233,7 @@ async def create_order_batch(
             "processed_by": batch.processed_by,
             "remark": batch.remark,
             "created_at": batch.created_at,
-            "updated_at": batch.updated_at
+            "updated_at": batch.updated_at,
         }
         return Success(data=batch_detail)
     except Exception as e:
@@ -244,7 +249,7 @@ async def get_batch_detail(
         batch = await OrderBatchController.get_batch_detail(batch_id)
         if not batch:
             return Fail(msg="バッチが見つかりません")
-        
+
         batch_detail = {
             "id": batch.id,
             "batch_number": batch.batch_number,
@@ -261,7 +266,7 @@ async def get_batch_detail(
             "processed_by": batch.processed_by,
             "remark": batch.remark,
             "created_at": batch.created_at,
-            "updated_at": batch.updated_at
+            "updated_at": batch.updated_at,
         }
         return Success(data=batch_detail)
     except Exception as e:
@@ -278,7 +283,7 @@ async def add_orders_to_batch(
         success = await OrderBatchController.add_orders_to_batch(batch_id, order_ids)
         if not success:
             return Fail(msg="バッチが見つかりません")
-        
+
         return Success(data={"message": f"{len(order_ids)}件の注文書をバッチに追加しました"})
     except Exception as e:
         return Fail(msg=f"バッチ追加でエラーが発生しました: {str(e)}")
@@ -294,7 +299,7 @@ async def process_batch(
         success = await OrderBatchController.process_batch(batch_id, processed_by)
         if not success:
             return Fail(msg="バッチが見つかりません")
-        
+
         return Success(data={"message": "バッチ処理を完了しました"})
     except Exception as e:
         return Fail(msg=f"バッチ処理でエラーが発生しました: {str(e)}")
@@ -309,25 +314,25 @@ async def get_monthly_statistics(
         # 基本統計
         total_orders = await OrderController.get_orders_list(year_month=year_month, page=1, pageSize=10000)
         total_count = total_orders["total"]
-        
+
         # より効率的な統計計算のため、実際のデータを取得
         all_orders = total_orders["items"]
         sent_count = len([o for o in all_orders if o["is_sent"]])
         collected_count = len([o for o in all_orders if o["is_collected"]])
-        
+
         # ステータス別統計
         status_stats = {}
         for order in all_orders:
             status = order["status"]
             status_stats[status] = status_stats.get(status, 0) + 1
-        
+
         # BP会社別統計
         bp_company_stats = {}
         for order in all_orders:
             bp_company = order["bp_company_name"]
             if bp_company:
                 bp_company_stats[bp_company] = bp_company_stats.get(bp_company, 0) + 1
-        
+
         statistics = {
             "year_month": year_month,
             "total_orders": total_count,
@@ -336,9 +341,9 @@ async def get_monthly_statistics(
             "send_rate": (sent_count / total_count * 100) if total_count > 0 else 0,
             "collection_rate": (collected_count / total_count * 100) if total_count > 0 else 0,
             "status_breakdown": status_stats,
-            "bp_company_breakdown": bp_company_stats
+            "bp_company_breakdown": bp_company_stats,
         }
-        
+
         return Success(data=statistics)
     except Exception as e:
         return Fail(msg=f"統計情報取得でエラーが発生しました: {str(e)}")
@@ -353,9 +358,7 @@ async def get_order_mail_template(
     """获取填充后的注文書邮件模板"""
     try:
         result = await MailController.get_filled_template(
-            template_id=template_id,
-            order_id=order_id,
-            token=authorization
+            template_id=template_id, order_id=order_id, token=authorization
         )
         return Success(data=result)
     except Exception as e:
@@ -409,8 +412,8 @@ async def send_order_mail(
                 "subject": request.subject,
                 "content": request.content,
                 "cc": ",".join(request.cc) if request.cc else "",
-                "bcc": ",".join(request.bcc) if request.bcc else ""
-            }
+                "bcc": ",".join(request.bcc) if request.bcc else "",
+            },
         )
 
         # 如果有密码邮件内容，发送密码邮件
@@ -428,9 +431,6 @@ async def send_order_mail(
         order.status = OrderStatus.SENT
         await order.save()
 
-        return Success(data={
-            "message": "邮件发送成功",
-            "attachment_count": len(attachment_files)
-        })
+        return Success(data={"message": "邮件发送成功", "attachment_count": len(attachment_files)})
     except Exception as e:
         return Fail(msg=f"邮件发送でエラーが発生しました: {str(e)}")

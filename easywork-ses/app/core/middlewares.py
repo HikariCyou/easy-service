@@ -4,11 +4,9 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
-from starlette.middleware.base import (BaseHTTPMiddleware,
-                                       RequestResponseEndpoint)
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
-
 
 from .bgtask import BgTasks
 

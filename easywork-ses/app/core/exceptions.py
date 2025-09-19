@@ -1,5 +1,8 @@
-from fastapi.exceptions import (HTTPException, RequestValidationError,
-                                ResponseValidationError)
+from fastapi.exceptions import (
+    HTTPException,
+    RequestValidationError,
+    ResponseValidationError,
+)
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from tortoise.exceptions import DoesNotExist, IntegrityError

@@ -4,9 +4,13 @@ from fastapi import APIRouter, Query
 
 from app.controllers.case import case_candidate_controller, case_controller
 from app.schemas import Fail, Success
-from app.schemas.case import (AddCaseCandidateSchema, AddCaseSchema,
-                              UpdateCaseCandidateSchema, UpdateCaseSchema,
-                              CaseTerminationSchema)
+from app.schemas.case import (
+    AddCaseCandidateSchema,
+    AddCaseSchema,
+    CaseTerminationSchema,
+    UpdateCaseCandidateSchema,
+    UpdateCaseSchema,
+)
 
 router = APIRouter()
 
@@ -133,11 +137,11 @@ async def terminate_case(termination_data: CaseTerminationSchema):
         case = await case_controller.get_case_by_id(case_id=termination_data.case_id)
         if not case:
             return Fail(msg="案件が見つかりませんでした")
-        
+
         result = await case.terminate_case(
             termination_date=termination_data.termination_date,
             reason=termination_data.reason,
-            terminated_by=termination_data.terminated_by
+            terminated_by=termination_data.terminated_by,
         )
         return Success(data=result)
     except Exception as e:
@@ -149,23 +153,23 @@ async def get_client_sales_representatives(client_company_id: int):
     """指定した取引先会社の営業担当者一覧を取得"""
     try:
         from app.models.client import ClientContact
-        representatives = await ClientContact.filter(
-            client_company_id=client_company_id,
-            is_active=True
-        ).all()
-        
+
+        representatives = await ClientContact.filter(client_company_id=client_company_id, is_active=True).all()
+
         data = []
         for rep in representatives:
             rep_data = await rep.to_dict()
-            data.append({
-                "id": rep_data["id"],
-                "name": rep_data["name"],
-                "name_kana": rep_data.get("name_kana"),
-                "email": rep_data["email"],
-                "phone": rep_data.get("phone"),
-                "is_primary": rep_data.get("is_primary", False)
-            })
-        
+            data.append(
+                {
+                    "id": rep_data["id"],
+                    "name": rep_data["name"],
+                    "name_kana": rep_data.get("name_kana"),
+                    "email": rep_data["email"],
+                    "phone": rep_data.get("phone"),
+                    "is_primary": rep_data.get("is_primary", False),
+                }
+            )
+
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
@@ -175,25 +179,46 @@ async def get_client_sales_representatives(client_company_id: int):
 async def get_company_sales_representatives():
     """自社の営業担当者（Employee）一覧を取得"""
     try:
-        from app.models.personnel import Personnel
         from app.models.enums import PersonType
-        
-        representatives = await Personnel.filter(
-            person_type=PersonType.EMPLOYEE,
-            is_active=True
-        ).all()
-        
+        from app.models.personnel import Personnel
+
+        representatives = await Personnel.filter(person_type=PersonType.EMPLOYEE, is_active=True).all()
+
         data = []
         for rep in representatives:
             rep_data = await rep.to_dict()
-            data.append({
-                "id": rep_data["id"],
-                "name": rep_data["name"],
-                "code": rep_data.get("code"),
-                "email": rep_data.get("email"),
-                "phone": rep_data.get("phone")
-            })
-        
+            data.append(
+                {
+                    "id": rep_data["id"],
+                    "name": rep_data["name"],
+                    "code": rep_data.get("code"),
+                    "email": rep_data.get("email"),
+                    "phone": rep_data.get("phone"),
+                }
+            )
+
         return Success(data=data)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/by-client/{client_id}", summary="取引先会社別案件一覧取得")
+async def get_cases_by_client(
+    client_id: int,
+    page: Optional[int] = Query(1, ge=1),
+    pageSize: Optional[int] = Query(10, ge=1, le=100),
+    title: Optional[str] = Query(None, description="案件タイトル検索"),
+    status: Optional[str] = Query(None, description="ステータス検索"),
+):
+    """指定した取引先会社の案件一覧を取得する"""
+    try:
+        data, total = await case_controller.get_cases_with_filters(
+            page=page,
+            page_size=pageSize,
+            title=title,
+            status=status,
+            client_company_id=client_id
+        )
+        return Success(data=data, total=total)
     except Exception as e:
         return Fail(msg=str(e))

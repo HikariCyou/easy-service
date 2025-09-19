@@ -1,21 +1,21 @@
-from typing import List, Dict, Any, Optional, Union, Tuple
 from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
 from app.models import ContractStatus
-from app.models.personnel import Personnel
-from app.models.evaluation import PersonEvaluation
-from app.models.enums import PersonType, ContractItemType
 from app.models.case import Case
 from app.models.contract import Contract
+from app.models.enums import ContractItemType, PersonType
+from app.models.evaluation import PersonEvaluation
+from app.models.personnel import Personnel
 from app.schemas.import_person import (
-    ImportPersonSchema,
+    ImportPersonCurrentAssignmentSchema,
     ImportPersonDetailSchema,
     ImportPersonHistorySchema,
-    ImportPersonCurrentAssignmentSchema,
-    ImportPersonStatsSchema
+    ImportPersonSchema,
+    ImportPersonStatsSchema,
 )
 
 
@@ -28,7 +28,7 @@ class ImportPersonController:
     async def get_staff(self, person_id: int):
         """获取要员基本信息"""
         personnel = await Personnel.get_or_none(id=person_id).prefetch_related(
-            'skills__skill', 'contracts', 'contracts__case'
+            "skills__skill", "contracts", "contracts__case"
         )
         if not personnel:
             return None
@@ -44,72 +44,84 @@ class ImportPersonController:
         except (ValueError, TypeError):
             return None
 
-    async def get_staff_list(self, page: int = 1, page_size: int = 10, search_params: Dict = None,
-                           person_type: str = None, sort_by: str = None, include_inactive: bool = False) -> Dict[str, Any]:
+    async def get_staff_list(
+        self,
+        page: int = 1,
+        page_size: int = 10,
+        search_params: Dict = None,
+        person_type: str = None,
+        sort_by: str = None,
+        include_inactive: bool = False,
+    ) -> Dict[str, Any]:
         """获取要员一览（Personnel统一系统）"""
         if search_params is None:
             search_params = {}
 
         # 构建查询条件
         query = Q()
-        
+
         # 活跃状态过滤
         if not include_inactive:
             query &= Q(is_active=True)
 
         # 人员类型过滤（优先使用search_params中的，然后是直接参数）
-        target_person_type = search_params.get('person_type') or person_type
+        target_person_type = search_params.get("person_type") or person_type
         if target_person_type:
-            if target_person_type == 'bp_employee':
+            if target_person_type == "bp_employee":
                 query &= Q(person_type=PersonType.BP_EMPLOYEE)
-            elif target_person_type == 'freelancer':
+            elif target_person_type == "freelancer":
                 query &= Q(person_type=PersonType.FREELANCER)
-            elif target_person_type == 'employee':
+            elif target_person_type == "employee":
                 query &= Q(person_type=PersonType.EMPLOYEE)
 
         # 搜索条件
-        if search_params.get('keyword'):
-            keyword = search_params['keyword']
-            query &= (Q(name__icontains=keyword) | Q(code__icontains=keyword))
-        if search_params.get('employment_status'):
-            query &= Q(employment_status=search_params['employment_status'])
-        if search_params.get('is_active') is not None:
-            query &= Q(is_active=search_params['is_active'])
-        if search_params.get('skill_name'):
-            query &= Q(skills__skill__name__icontains=search_params['skill_name'])
-        if search_params.get('min_experience_years'):
-            query &= Q(it_experience_years__gte=search_params['min_experience_years'])
-        if search_params.get('max_experience_years'):
-            query &= Q(it_experience_years__lte=search_params['max_experience_years'])
-        if search_params.get('min_unit_price'):
-            query &= Q(standard_unit_price__gte=search_params['min_unit_price'])
-        if search_params.get('max_unit_price'):
-            query &= Q(standard_unit_price__lte=search_params['max_unit_price'])
-        if search_params.get('nationality'):
-            query &= Q(nationality__icontains=search_params['nationality'])
-        if search_params.get('preferred_location'):
-            query &= Q(preferred_location__icontains=search_params['preferred_location'])
-        if search_params.get('visa_expiring_within_days'):
-            days = search_params['visa_expiring_within_days']
+        if search_params.get("keyword"):
+            keyword = search_params["keyword"]
+            query &= Q(name__icontains=keyword) | Q(code__icontains=keyword)
+        if search_params.get("employment_status"):
+            query &= Q(employment_status=search_params["employment_status"])
+        if search_params.get("is_active") is not None:
+            query &= Q(is_active=search_params["is_active"])
+        if search_params.get("skill_name"):
+            query &= Q(skills__skill__name__icontains=search_params["skill_name"])
+        if search_params.get("min_experience_years"):
+            query &= Q(it_experience_years__gte=search_params["min_experience_years"])
+        if search_params.get("max_experience_years"):
+            query &= Q(it_experience_years__lte=search_params["max_experience_years"])
+        if search_params.get("min_unit_price"):
+            query &= Q(standard_unit_price__gte=search_params["min_unit_price"])
+        if search_params.get("max_unit_price"):
+            query &= Q(standard_unit_price__lte=search_params["max_unit_price"])
+        if search_params.get("nationality"):
+            query &= Q(nationality__icontains=search_params["nationality"])
+        if search_params.get("preferred_location"):
+            query &= Q(preferred_location__icontains=search_params["preferred_location"])
+        if search_params.get("visa_expiring_within_days"):
+            days = search_params["visa_expiring_within_days"]
             expiry_date = date.today() + timedelta(days=days)
             query &= Q(visa_expire_date__lte=expiry_date, visa_expire_date__gte=date.today())
-        if search_params.get('case_id'):
-            query &= Q(contracts__case_id=search_params['case_id'])
+        if search_params.get("case_id"):
+            query &= Q(contracts__case_id=search_params["case_id"])
 
         # 获取总数
         total = await Personnel.filter(query).count()
 
         # 排序
-        order_by = '-updated_at'
-        if sort_by == 'name':
-            order_by = 'name'
-        elif sort_by == 'created_at':
-            order_by = '-created_at'
+        order_by = "-updated_at"
+        if sort_by == "name":
+            order_by = "name"
+        elif sort_by == "created_at":
+            order_by = "-created_at"
 
         # 获取数据
-        personnel_list = await Personnel.filter(query).prefetch_related(
-            'skills__skill', 'contracts', 'contracts__case'
-        ).order_by(order_by).limit(page_size).offset((page - 1) * page_size).all()
+        personnel_list = (
+            await Personnel.filter(query)
+            .prefetch_related("skills__skill", "contracts", "contracts__case")
+            .order_by(order_by)
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+            .all()
+        )
 
         # 转换为schema
         items = []
@@ -117,42 +129,43 @@ class ImportPersonController:
             schema = await self._convert_personnel_to_schema(personnel)
             items.append(schema)
 
-        return {
-            "items": items,
-            "total": total
-        }
+        return {"items": items, "total": total}
 
     async def get_staff_detail(self, person_id: int) -> Optional[ImportPersonDetailSchema]:
         """获取要员详细信息"""
         personnel = await Personnel.get_or_none(id=person_id).prefetch_related(
-            'skills__skill', 'contracts', 'contracts__case',
-            'employee_detail', 'freelancer_detail', 'bp_employee_detail'
+            "skills__skill",
+            "contracts",
+            "contracts__case",
+            "employee_detail",
+            "freelancer_detail",
+            "bp_employee_detail",
         )
         if not personnel:
             return None
 
         return await self._convert_to_detail_schema(personnel)
 
-    async def get_staff_history(self, person_id: int, page: int = 1, page_size: int = 10) -> List[ImportPersonHistorySchema]:
+    async def get_staff_history(
+        self, person_id: int, page: int = 1, page_size: int = 10
+    ) -> List[ImportPersonHistorySchema]:
         """获取要员履歴（基于契约和评价）"""
         personnel = await Personnel.get_or_none(id=person_id)
         if not personnel:
             return []
 
         # 获取契约履歴
-        query =  Contract.filter(
-            personnel=personnel
-        ).prefetch_related('case', 'case__client_company', 'calculation_items')
+        query = Contract.filter(personnel=personnel).prefetch_related(
+            "case", "case__client_company", "calculation_items"
+        )
 
-        contracts = await  query.order_by('-contract_start_date').limit(page_size).offset((page - 1) * page_size).all()
+        contracts = await query.order_by("-contract_start_date").limit(page_size).offset((page - 1) * page_size).all()
         total = await query.count()
         result = []
         for contract in contracts:
             # 获取相关评价
             evaluation = await PersonEvaluation.filter(
-                person_id=personnel.id,
-                person_type=personnel.person_type,
-                contract=contract
+                person_id=personnel.id, person_type=personnel.person_type, contract=contract
             ).first()
 
             history = ImportPersonHistorySchema(
@@ -162,23 +175,25 @@ class ImportPersonController:
                 person_type=personnel.person_type.value,
                 case_id=contract.case.id if contract.case else None,
                 case_name=contract.case.title if contract.case else "不明",
-                case_code=getattr(contract.case, 'code', None),
-                case_location=getattr(contract.case, 'location', None),
+                case_code=getattr(contract.case, "code", None),
+                case_location=getattr(contract.case, "location", None),
                 contract_id=contract.id,
                 contract_number=contract.contract_number,
                 contract_start_date=contract.contract_start_date,
                 contract_end_date=contract.contract_end_date,
                 unit_price=await self._get_basic_unit_price(contract),
                 status=contract.status.value if contract.status else None,
-                client_name=getattr(getattr(contract.case, 'client_company', None), 'company_name', None) if contract.case else None,
-                project_description=getattr(contract.case, 'description', None),
+                client_name=getattr(getattr(contract.case, "client_company", None), "company_name", None)
+                if contract.case
+                else None,
+                project_description=getattr(contract.case, "description", None),
                 evaluation_id=evaluation.id if evaluation else None,
                 overall_rating=evaluation.overall_rating if evaluation else None,
-                created_at=contract.created_at.date() if contract.created_at else None
+                created_at=contract.created_at.date() if contract.created_at else None,
             )
             result.append(history)
 
-        return result,total
+        return result, total
 
     async def get_staff_current_assignments(self, person_id: int) -> Optional[ImportPersonCurrentAssignmentSchema]:
         """获取要员当前参与案件"""
@@ -188,26 +203,30 @@ class ImportPersonController:
 
         # 获取当前有效契约
         current_date = date.today()
-        current_contract = await Contract.filter(
-            personnel=personnel,
-            contract_start_date__lte=current_date,
-            contract_end_date__gte=current_date,
-            status='active'
-        ).prefetch_related('case', 'calculation_items').first()
+        current_contract = (
+            await Contract.filter(
+                personnel=personnel,
+                contract_start_date__lte=current_date,
+                contract_end_date__gte=current_date,
+                status="active",
+            )
+            .prefetch_related("case", "calculation_items")
+            .first()
+        )
 
         if not current_contract:
             return None
 
         return ImportPersonCurrentAssignmentSchema(
             project_name=current_contract.case.title if current_contract.case else "不明",
-            client_company=getattr(current_contract.case, 'client_company', None),
+            client_company=getattr(current_contract.case, "client_company", None),
             contract_start_date=current_contract.contract_start_date,
             contract_end_date=current_contract.contract_end_date,
             unit_price=await self._get_basic_unit_price(current_contract),
             working_hours=self._decimal_to_float(current_contract.standard_working_hours),
-            location=getattr(current_contract.case, 'location', None),
+            location=getattr(current_contract.case, "location", None),
             status=current_contract.status,
-            remark=current_contract.remark
+            remark=current_contract.remark,
         )
 
     async def update_staff_status(self, person_id: int, person_type: str, status_data: Dict[str, Any]) -> bool:
@@ -218,14 +237,14 @@ class ImportPersonController:
 
         async with in_transaction():
             # 更新基本状态字段
-            if 'employment_status' in status_data:
-                personnel.employment_status = status_data['employment_status']
-            if 'available_start_date' in status_data:
-                personnel.available_start_date = status_data['available_start_date']
-            if 'current_project_end_date' in status_data:
-                personnel.current_project_end_date = status_data['current_project_end_date']
-            if 'remark' in status_data:
-                personnel.remark = status_data['remark']
+            if "employment_status" in status_data:
+                personnel.employment_status = status_data["employment_status"]
+            if "available_start_date" in status_data:
+                personnel.available_start_date = status_data["available_start_date"]
+            if "current_project_end_date" in status_data:
+                personnel.current_project_end_date = status_data["current_project_end_date"]
+            if "remark" in status_data:
+                personnel.remark = status_data["remark"]
 
             await personnel.save()
 
@@ -267,45 +286,43 @@ class ImportPersonController:
             foreign_staff=foreign_count,
             visa_expiring_soon=visa_expiring_count,
             senior_staff=senior_count,
-            junior_staff=junior_count
+            junior_staff=junior_count,
         )
 
     # ===== 内部辅助方法 =====
-    
+
     async def _get_basic_unit_price(self, contract: Contract) -> Optional[float]:
         """从契约精算项目中获取基本给（单价）"""
-        if not hasattr(contract, 'calculation_items'):
+        if not hasattr(contract, "calculation_items"):
             return None
-            
+
         # 查找基本给项目
         for item in contract.calculation_items:
             # 基本给通常是 BASIC_SALARY 类型
-            if hasattr(item, 'item_type') and item.item_type == ContractItemType.BASIC_SALARY.value:
+            if hasattr(item, "item_type") and item.item_type == ContractItemType.BASIC_SALARY.value:
                 return self._decimal_to_float(item.amount)
-        
+
         # 如果没有找到基本给，返回第一个项目的金额（兼容性处理）
         if contract.calculation_items:
             first_item = contract.calculation_items[0]
             return self._decimal_to_float(first_item.amount)
-            
+
         return None
 
     async def _get_visa_expiring_personnel(self, days: int = 90) -> List[Personnel]:
         """获取签证即将到期的人员"""
         expiry_date = date.today() + timedelta(days=days)
         return await Personnel.filter(
-            visa_expire_date__lte=expiry_date,
-            visa_expire_date__gte=date.today(),
-            is_active=True
+            visa_expire_date__lte=expiry_date, visa_expire_date__gte=date.today(), is_active=True
         ).all()
 
     async def _convert_personnel_to_schema(self, personnel: Personnel):
         """将Personnel转换为ImportPersonSchema"""
         dict_data = await personnel.to_dict()
-        
+
         # 字段名映射
-        dict_data['type'] = dict_data.get('person_type', '')
-        
+        dict_data["type"] = dict_data.get("person_type", "")
+
         # 获取技能数据
         skills_data = []
         for personnel_skill in personnel.skills:
@@ -315,53 +332,55 @@ class ImportPersonController:
             skill_dict = {f"skill_{k}": v for k, v in skill_dict.items()}
             skill_data = {**personnel_skill_dict, **skill_dict}
             skills_data.append(skill_data)
-        dict_data['skills'] = skills_data
-            
+        dict_data["skills"] = skills_data
+
         # 获取契约数据（已经通过prefetch_related预加载）
         contracts = await personnel.contracts.all()
-        
+
         if contracts:
-            dict_data['contracts'] = [await contract.to_dict() for contract in contracts]
-            
+            dict_data["contracts"] = [await contract.to_dict() for contract in contracts]
+
             # 获取当前活跃契约
             current_date = date.today()
             current_contract = None
             for contract in contracts:
-                if (contract.contract_start_date and contract.contract_end_date and
-                    contract.contract_start_date <= current_date and 
-                    contract.contract_end_date >= current_date):
+                if (
+                    contract.contract_start_date
+                    and contract.contract_end_date
+                    and contract.contract_start_date <= current_date
+                    and contract.contract_end_date >= current_date
+                ):
                     current_contract = contract
                     break
-                    
+
             if current_contract:
-                dict_data['contract'] = await current_contract.to_dict()
+                dict_data["contract"] = await current_contract.to_dict()
                 # 获取关联的案件
                 case = await current_contract.case
                 if case:
-                    dict_data['case'] = await case.to_dict()
+                    dict_data["case"] = await case.to_dict()
                 else:
-                    dict_data['case'] = None
+                    dict_data["case"] = None
             else:
-                dict_data['contract'] = None
-                dict_data['case'] = None
+                dict_data["contract"] = None
+                dict_data["case"] = None
         else:
-            dict_data['contracts'] = []
-            dict_data['contract'] = None
-            dict_data['case'] = None
+            dict_data["contracts"] = []
+            dict_data["contract"] = None
+            dict_data["case"] = None
 
         return dict_data
-
 
     async def _convert_to_detail_schema(self, personnel: Personnel) -> ImportPersonDetailSchema:
         """将Personnel转换为ImportPersonDetailSchema"""
         # 基本schema
         base_schema = await self._convert_personnel_to_schema(personnel)
-        
+
         # 详细信息
         emergency_contact_info = {
             "name": personnel.emergency_contact_name,
             "phone": personnel.emergency_contact_phone,
-            "relation": personnel.emergency_contact_relation
+            "relation": personnel.emergency_contact_relation,
         }
 
         # 获取特化信息
@@ -373,7 +392,7 @@ class ImportPersonController:
                     "joining_time": employee_detail.joining_time,
                     "position": employee_detail.position,
                     "employment_type": employee_detail.employment_type,
-                    "salary": employee_detail.salary
+                    "salary": employee_detail.salary,
                 }
         elif personnel.person_type == PersonType.FREELANCER:
             if personnel.freelancer_detail:
@@ -382,7 +401,7 @@ class ImportPersonController:
                     "business_name": freelancer_detail.business_name,
                     "tax_number": freelancer_detail.tax_number,
                     "business_start_date": freelancer_detail.business_start_date,
-                    "preferred_work_style": freelancer_detail.preferred_work_style
+                    "preferred_work_style": freelancer_detail.preferred_work_style,
                 }
         elif personnel.person_type == PersonType.BP_EMPLOYEE:
             if personnel.bp_employee_detail:
@@ -390,15 +409,17 @@ class ImportPersonController:
                 bp_company = await bp_detail.bp_company
                 specialized_info = {
                     "bp_company_name": bp_company.name if bp_company else None,
-                    "interview_available": bp_detail.interview_available
+                    "interview_available": bp_detail.interview_available,
                 }
 
         # 将特化信息添加到base_schema中
-        base_schema.update({
-            "specialized_info": specialized_info,
-            "current_age": personnel.current_age,
-        })
-        
+        base_schema.update(
+            {
+                "specialized_info": specialized_info,
+                "current_age": personnel.current_age,
+            }
+        )
+
         return ImportPersonDetailSchema(**base_schema)
 
 

@@ -1,28 +1,29 @@
+import json
 from calendar import monthrange
 from datetime import date, datetime, timezone
-from typing import Optional, List, Union
-from fastapi import APIRouter, Query, Body, HTTPException, Header, BackgroundTasks
+from typing import List, Optional, Union
+
+from fastapi import APIRouter, BackgroundTasks, Body, Header, HTTPException, Query
 
 from app.controllers.attendance import attendance_controller
 from app.controllers.import_person import import_person_controller
 from app.core.ctx import CTX_USER_ID
 from app.core.process_client import process_client
-from app.schemas import Success, Fail
-import json
+from app.schemas import Fail, Success
 from app.schemas.attendance import (
-    DailyAttendanceSchema,
-    CreateDailyAttendanceSchema,
-    UpdateDailyAttendanceSchema,
-    MonthlyAttendanceSchema,
+    ApproveMonthlyAttendanceSchema,
     AttendanceApprovalSchema,
     BulkAttendanceCreateSchema,
-    WeeklyMoodSchema,
-    SetWeeklyMoodSchema,
-    MoodHistoryResponse,
-    TeamMoodSummarySchema,
+    CreateDailyAttendanceSchema,
+    DailyAttendanceSchema,
+    MonthlyAttendanceSchema,
     MonthlyAttendanceStatusSchema,
+    MoodHistoryResponse,
+    SetWeeklyMoodSchema,
     SubmitMonthlyAttendanceSchema,
-    ApproveMonthlyAttendanceSchema,
+    TeamMoodSummarySchema,
+    UpdateDailyAttendanceSchema,
+    WeeklyMoodSchema,
 )
 
 router = APIRouter()
@@ -39,7 +40,7 @@ async def start_approval_process(monthly_id: int, authorization: str):
             process_key=MONTHLY_ATTENDANCE_PROCESS_KEY,
             business_key=str(monthly_id),
             variables=json.dumps({"showSign": False}),
-            token=authorization
+            token=authorization,
         )
         if result:
             print(f"月次考勤审批流程启动成功: monthly_id={monthly_id}")
@@ -53,7 +54,7 @@ async def start_approval_process(monthly_id: int, authorization: str):
 async def create_daily_attendance(data: CreateDailyAttendanceSchema):
     """
     日次出勤記録を作成
-    
+
     - 契約IDと勤務日の組み合わせは一意
     - 出勤・退勤時刻から自動で実働時間を計算
     - 有給・病欠などの場合は標準時間を設定
@@ -79,7 +80,7 @@ async def get_daily_attendance_list(
 ):
     """
     日次出勤記録の一覧を取得
-    
+
     検索条件:
     - ユーザーID、契約ID
     - 日付範囲
@@ -102,9 +103,7 @@ async def get_daily_attendance_list(
         #     search_params["is_approved"] = is_approved  # 日次考勤不再有审批状态
 
         result = await attendance_controller.get_daily_attendance_list(
-            page=page,
-            page_size=page_size,
-            search_params=search_params
+            page=page, page_size=page_size, search_params=search_params
         )
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
@@ -129,7 +128,7 @@ async def get_daily_attendance(attendance_id: int):
 async def update_daily_attendance(attendance_id: int, data: UpdateDailyAttendanceSchema):
     """
     日次出勤記録を更新
-    
+
     注意: 承認済みの記録は更新できません
     """
     try:
@@ -144,7 +143,7 @@ async def update_daily_attendance(attendance_id: int, data: UpdateDailyAttendanc
 async def delete_daily_attendance(attendance_id: int):
     """
     日次出勤記録を削除
-    
+
     注意: 承認済みの記録は削除できません
     """
     try:
@@ -161,7 +160,7 @@ async def delete_daily_attendance(attendance_id: int):
 async def bulk_create_attendances(data: BulkAttendanceCreateSchema):
     """
     複数の出勤記録を一括作成
-    
+
     個別のエラーがあっても処理は継続し、成功した分のみ作成
     """
     try:
@@ -176,14 +175,12 @@ async def bulk_create_attendances(data: BulkAttendanceCreateSchema):
 async def approve_attendances(data: AttendanceApprovalSchema):
     """
     出勤記録を承認
-    
+
     複数の記録を一括で承認可能
     承認済みの記録は承認者と承認日時を記録
     """
     try:
-        approved_attendances = await attendance_controller.approve_attendances(
-            data.attendance_ids, data.approved_by
-        )
+        approved_attendances = await attendance_controller.approve_attendances(data.attendance_ids, data.approved_by)
         result = [await att.to_dict() for att in approved_attendances]
         return Success(data=result, total=len(result))
     except Exception as e:
@@ -198,7 +195,7 @@ async def get_monthly_attendance_list(
     contract_id: Optional[int] = Query(None, description="契約ID"),
     year_month: Optional[str] = Query(None, description="対象年月（YYYY-MM）"),
     is_calculated: Optional[bool] = Query(None, description="計算済み状態"),
-    is_confirmed: Optional[bool] = Query(None, description="確定状態")
+    is_confirmed: Optional[bool] = Query(None, description="確定状態"),
 ):
     """
     月次出勤集計の一覧を取得
@@ -217,9 +214,7 @@ async def get_monthly_attendance_list(
             search_params["is_confirmed"] = is_confirmed
 
         result = await attendance_controller.get_monthly_attendance_list(
-            page=page,
-            page_size=page_size,
-            search_params=search_params
+            page=page, page_size=page_size, search_params=search_params
         )
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
@@ -234,12 +229,11 @@ async def get_monthly_attendance_list(
 
 @router.get("/calendar", summary="出勤カレンダー取得")
 async def get_attendance_calendar(
-    contract_id: int = Query(..., description="契約ID"),
-    year_month: str = Query(..., description="対象年月（YYYY-MM）")
+    contract_id: int = Query(..., description="契約ID"), year_month: str = Query(..., description="対象年月（YYYY-MM）")
 ):
     """
     指定契約・年月の出勤カレンダーを取得
-    
+
     月間の全日程と出勤状況を日別に表示
     営業日判定、実績サマリーも含む
     """
@@ -255,11 +249,11 @@ async def get_attendance_stats(
     user_id: Optional[int] = Query(None, description="ユーザーID"),
     contract_id: Optional[int] = Query(None, description="契約ID"),
     start_date: Optional[date] = Query(None, description="統計開始日"),
-    end_date: Optional[date] = Query(None, description="統計終了日")
+    end_date: Optional[date] = Query(None, description="統計終了日"),
 ):
     """
     出勤統計を取得
-    
+
     含まれる統計:
     - 出勤タイプ別集計
     - 承認状況
@@ -283,26 +277,25 @@ async def get_attendance_stats(
         return Fail(msg=str(e))
 
 
-
 @router.get("/user", summary="ユーザー勤怠情報取得")
 async def get_user_attendance_data(
     year_month: str = Query(..., description="対象年月（YYYY-MM）", pattern="^\\d{4}-\\d{2}$")
 ):
     """
     現在ログインユーザーの月次勤怠情報を取得（勤怠録入画面用）
-    
+
     Args:
         year_month: 対象年月（YYYY-MM形式）
-    
+
     機能:
     - 現在ログインユーザーの勤怠データを取得
     - 指定月の全日程の勤怠記録とカレンダー表示
     - 契約情報、案件情報も含めた包括的な情報提供
     - 出勤率、承認状況などのサマリー情報
-    
+
     返却データ:
     - 要員基本情報
-    - 現在の契約・案件情報  
+    - 現在の契約・案件情報
     - 月内の勤怠記録
     - カレンダー形式の日別データ（編集可能状態含む）
     - 統計サマリー（総勤務時間、出勤率等）
@@ -311,49 +304,46 @@ async def get_user_attendance_data(
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-        
+
         # YYYY-MM形式から年月の最初の日を作成
-        year, month = map(int, year_month.split('-'))
+        year, month = map(int, year_month.split("-"))
         target_date = date(year, month, 1)
-        
+
         data = await attendance_controller.get_user_attendance_data(
-            user_id=user_id,
-            period_type="month",
-            target_date=target_date
+            user_id=user_id, period_type="month", target_date=target_date
         )
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
 
 
-@router.get("/get_attendance_by_uid" , summary="ユーザーIDで出勤記録取得")
+@router.get("/get_attendance_by_uid", summary="ユーザーIDで出勤記録取得")
 async def get_attendance_by_uid(
     id: int = Query(..., description="ユーザーID"),
-    year_month: str = Query(..., description="対象年月（YYYY-MM）", pattern="^\\d{4}-\\d{2}$")
+    year_month: str = Query(..., description="対象年月（YYYY-MM）", pattern="^\\d{4}-\\d{2}$"),
 ):
     try:
-        year, month = map(int, year_month.split('-'))
+        year, month = map(int, year_month.split("-"))
         target_date = date(year, month, 1)
 
         personal = await import_person_controller.get_staff(person_id=id)
 
         data = await attendance_controller.get_user_attendance_data(
-            user_id=personal.user_id,
-            period_type="month",
-            target_date=target_date
+            user_id=personal.user_id, period_type="month", target_date=target_date
         )
         return Success(data=data)
     except Exception as e:
         return Fail(msg=str(e))
 
+
 @router.get("/dashboard", summary="出勤管理ダッシュボード")
 async def get_attendance_dashboard(
     user_id: Optional[int] = Query(None, description="ユーザーID"),
-    contract_id: Optional[int] = Query(None, description="契約ID")
+    contract_id: Optional[int] = Query(None, description="契約ID"),
 ):
     """
     出勤管理ダッシュボード用データを取得
-    
+
     含まれる情報:
     - 当月出勤統計
     - 承認待ち件数
@@ -363,29 +353,24 @@ async def get_attendance_dashboard(
     try:
         # 当月の統計
         today = datetime.now(timezone.utc).date()
-        current_month_stats = await attendance_controller.get_attendance_stats({
-            "user_id": user_id,
-            "contract_id": contract_id,
-            "start_date": today.replace(day=1),
-            "end_date": today
-        })
-        
+        current_month_stats = await attendance_controller.get_attendance_stats(
+            {"user_id": user_id, "contract_id": contract_id, "start_date": today.replace(day=1), "end_date": today}
+        )
+
         # 承認待ち件数
         pending_approvals = await attendance_controller.get_daily_attendance_list(
-            page=1, 
-            page_size=1,
-            search_params={"user_id": user_id, "contract_id": contract_id}  # 移除is_approved筛选
+            page=1, page_size=1, search_params={"user_id": user_id, "contract_id": contract_id}  # 移除is_approved筛选
         )
-        
+
         dashboard_data = {
             "current_month_stats": current_month_stats,
             "pending_approvals_count": pending_approvals["total"],
             "quick_actions": {
                 "today_attendance_recorded": False,  # 実装時に当日記録チェック
                 "monthly_calculation_needed": False,  # 実装時に月次計算要否チェック
-            }
+            },
         }
-        
+
         return Success(data=dashboard_data)
     except Exception as e:
         return Fail(msg=str(e))
@@ -401,17 +386,17 @@ async def get_staff_list_with_attendance(
     employment_status: Optional[str] = Query(None, description="就業ステータスフィルター"),
     is_active: Optional[bool] = Query(None, description="アクティブステータスフィルター"),
     nationality: Optional[str] = Query(None, description="国籍フィルター"),
-    include_inactive: bool = Query(False, description="非アクティブ要員を含む")
+    include_inactive: bool = Query(False, description="非アクティブ要員を含む"),
 ):
     """
     要員リスト取得（考勤データ汇总付き）
-    
+
     返却する情報:
     - 要員基本情報（氏名、コード、タイプ等）
     - 所属会社情報（BP社、自社、フリーランス）
     - 現在の案件・取引先情報
     - 指定月の考勤データ汇总（出勤天数、実働时间、残業时间、有給休暇等）
-    
+
     検索条件:
     - year_month: 考勤データの対象年月（YYYY-MM）、未指定時は当月
     - keyword: 氏名、フリーカナ、要員コードでの検索
@@ -439,9 +424,7 @@ async def get_staff_list_with_attendance(
             search_params["year_month"] = year_month
 
         result = await attendance_controller.get_staff_list_with_attendance(
-            page=page,
-            page_size=page_size,
-            search_params=search_params
+            page=page, page_size=page_size, search_params=search_params
         )
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
@@ -452,19 +435,20 @@ async def get_staff_list_with_attendance(
 # Weekly Mood Tracking API Endpoints
 # =======================================
 
+
 @router.post("/mood/weekly", summary="週間心情設定")
 async def set_weekly_mood(data: SetWeeklyMoodSchema):
     """
     現在週の心情状態を設定
-    
+
     機能:
     - 現在週の心情状態を記録
     - 既存の記録がある場合は更新
     - WeChat/Lark風の心情追跡機能
-    
+
     心情状態:
     - excellent: 😄 優秀/非常好
-    - good: 😊 良好  
+    - good: 😊 良好
     - normal: 😐 一般
     - stressed: 😰 有压力
     - tired: 😴 疲劳
@@ -474,12 +458,9 @@ async def set_weekly_mood(data: SetWeeklyMoodSchema):
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         mood = await attendance_controller.set_weekly_mood(
-            user_id=user_id,
-            mood_status=data.mood_status,
-            week_number=data.week_number,
-            comment=data.comment
+            user_id=user_id, mood_status=data.mood_status, week_number=data.week_number, comment=data.comment
         )
         return Success(data=await mood.to_dict())
     except Exception as e:
@@ -490,7 +471,7 @@ async def set_weekly_mood(data: SetWeeklyMoodSchema):
 async def get_current_week_mood():
     """
     現在週の心情記録を取得
-    
+
     返却データ:
     - 現在週の心情状態（設定済みの場合）
     - 週期間情報
@@ -500,9 +481,9 @@ async def get_current_week_mood():
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         mood = await attendance_controller.get_current_week_mood(user_id=user_id)
-        return Success(data= await mood.to_dict() if mood else None)
+        return Success(data=await mood.to_dict() if mood else None)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -510,16 +491,16 @@ async def get_current_week_mood():
 @router.get("/mood/history", summary="心情履歴取得")
 async def get_mood_history(
     year: Optional[int] = Query(None, description="対象年（未指定の場合は現在年）"),
-    limit: int = Query(12, ge=1, le=52, description="取得週数（1-52、デフォルト12週）")
+    limit: int = Query(12, ge=1, le=52, description="取得週数（1-52、デフォルト12週）"),
 ):
     """
     心情履歴を取得
-    
+
     機能:
     - 指定年の心情履歴を時系列で取得
     - 未指定の場合は現在年の最近12週を取得
     - 週期間、心情状態、コメント等を含む
-    
+
     Args:
         year: 対象年（未指定時は現在年）
         limit: 取得週数（デフォルト12週、最大52週）
@@ -528,12 +509,8 @@ async def get_mood_history(
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
-        history = await attendance_controller.get_mood_history(
-            user_id=user_id,
-            year=year,
-            limit=limit
-        )
+
+        history = await attendance_controller.get_mood_history(user_id=user_id, year=year, limit=limit)
         return Success(data=history)
     except Exception as e:
         return Fail(msg=str(e))
@@ -545,22 +522,22 @@ async def get_current_month_moods(
 ):
     """
     指定月の4週間心情データを取得
-    
+
     機能:
     - 指定月に含まれる全ての週の心情データを取得
     - 各週の詳細情報（週期間、心情状態、記録日時等）
     - 月次統計（記録率、平均スコア、心情分布等）
     - 跨年・跨月週の適切な処理
-    
+
     返却データ:
     - 月内の全週データ（通常4-5週）
     - 各週の心情記録状況
     - 月次心情統計サマリー
     - 記録完了率と分析
-    
+
     Args:
         year_month: 対象年月（YYYY-MM形式、未指定時は当月）
-        
+
     使用例:
     - /mood/monthly - 当月の心情データ
     - /mood/monthly?year_month=2024-07 - 2024年7月の心情データ
@@ -569,11 +546,8 @@ async def get_current_month_moods(
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
-        monthly_moods = await attendance_controller.get_current_month_moods(
-            user_id=user_id,
-            year_month=year_month
-        )
+
+        monthly_moods = await attendance_controller.get_current_month_moods(user_id=user_id, year_month=year_month)
         return Success(data=monthly_moods)
     except Exception as e:
         return Fail(msg=str(e))
@@ -582,22 +556,22 @@ async def get_current_month_moods(
 @router.get("/mood/team-summary", summary="チーム心情サマリー取得（管理者用）")
 async def get_team_mood_summary(
     week_count: int = Query(4, ge=1, le=12, description="対象週数（1-12、デフォルト4週）"),
-    team_filter: Optional[str] = Query(None, description="チームフィルター（案件名等）")
+    team_filter: Optional[str] = Query(None, description="チームフィルター（案件名等）"),
 ):
     """
     チーム心情サマリーを取得（管理者機能）
-    
+
     機能:
     - チームメンバーの心情状態分布を取得
     - 指定週数での心情推移を分析
     - 管理者が中心の状況把握用
-    
+
     返却データ:
     - 心情分布（状態別人数）
     - 心情推移トレンド
     - 平均心情スコア
     - チーム人数統計
-    
+
     Args:
         week_count: 分析対象週数（デフォルト4週）
         team_filter: チーム絞り込み条件
@@ -606,15 +580,13 @@ async def get_team_mood_summary(
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         # 管理者権限チェック（将来的に実装）
         # if not await check_manager_permission(user_id):
         #     return Fail(msg="管理者権限が必要です")
-            
+
         summary = await attendance_controller.get_team_mood_summary(
-            manager_user_id=user_id,
-            week_count=week_count,
-            team_filter=team_filter
+            manager_user_id=user_id, week_count=week_count, team_filter=team_filter
         )
         return Success(data=summary)
     except Exception as e:
@@ -622,28 +594,29 @@ async def get_team_mood_summary(
 
 
 # =======================================
-# Monthly Attendance Submission Workflow API Endpoints  
+# Monthly Attendance Submission Workflow API Endpoints
 # =======================================
+
 
 @router.post("/monthly/submit", summary="月次考勤提交")
 async def submit_monthly_attendance(
     data: SubmitMonthlyAttendanceSchema,
     background_tasks: BackgroundTasks,
-    authorization: str = Header(..., description="token验证")
+    authorization: str = Header(..., description="token验证"),
 ):
     """
     月次考勤を提交
-    
+
     機能:
     - 指定月の日次考勤記録を集計して提交
     - 提交時に統計データの快照を作成
     - 提交後は日次記録の修正が制限される1
-    
+
     提交条件:
     - 対象月の日次記録が存在する
     - 未提交状態（draft/withdrawn）である
     - 必要な承認が完了している
-    
+
     Args:
         data: 提交データ（対象年月、備考）
     """
@@ -651,16 +624,14 @@ async def submit_monthly_attendance(
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         monthly = await attendance_controller.submit_monthly_attendance(
-            user_id=user_id,
-            year_month=data.year_month,
-            remark=data.remark
+            user_id=user_id, year_month=data.year_month, remark=data.remark
         )
-        
+
         # 添加后台任务启动审批流程
         background_tasks.add_task(start_approval_process, monthly.id, authorization)
-        
+
         result = await monthly.to_dict()
         return Success(data=result, msg="月次考勤提交成功，審査プロセスを開始中")
     except Exception as e:
@@ -671,13 +642,13 @@ async def submit_monthly_attendance(
 async def get_monthly_attendance(monthly_id: int):
     """
     月次考勤の詳細データを取得
-    
+
     機能:
     - MonthlyAttendance基本情報
     - 提出ユーザーの要員情報
     - 該当月の日次考勤記録一覧
     - 統計汇総データ
-    
+
     Args:
         monthly_id: 月次考勤記録ID
     """
@@ -690,21 +661,21 @@ async def get_monthly_attendance(monthly_id: int):
         return Fail(msg=str(e))
 
 
-@router.post("/monthly/{monthly_id}/withdraw", summary="月次考勤提交撤回")  
+@router.post("/monthly/{monthly_id}/withdraw", summary="月次考勤提交撤回")
 async def withdraw_monthly_attendance(monthly_id: int):
     """
     月次考勤提交を撤回
-    
+
     機能:
     - 提交済みの月次考勤を撤回して修正可能状態に戻す
     - 統計データ快照をクリア
     - 日次記録の修正が再び可能になる
-    
+
     撤回条件:
     - submitted状态である
     - まだ承認されていない
     - 本人または権限のある管理者による操作
-    
+
     Args:
         monthly_id: 月次考勤記録ID
     """
@@ -712,11 +683,8 @@ async def withdraw_monthly_attendance(monthly_id: int):
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
-        monthly = await attendance_controller.withdraw_monthly_attendance(
-            monthly_id=monthly_id,
-            user_id=user_id
-        )
+
+        monthly = await attendance_controller.withdraw_monthly_attendance(monthly_id=monthly_id, user_id=user_id)
         result = await monthly.to_dict()
         return Success(data=result)
     except Exception as e:
@@ -727,17 +695,17 @@ async def withdraw_monthly_attendance(monthly_id: int):
 async def approve_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
     """
     月次考勤を承認（管理者機能）
-    
+
     機能:
     - 提交済みの月次考勤を承認
     - 承認後は修正不可の確定状态になる
     - 承認者情報と承認日時を記録
-    
+
     承認条件:
     - submitted状态である
     - 管理者権限を持つ
     - 統計データが正常である
-    
+
     Args:
         data: 承認データ（月次考勤ID、備考）
     """
@@ -745,15 +713,13 @@ async def approve_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         # 管理者権限チェック（将来的に実装）
         # if not await check_manager_permission(user_id):
         #     return Fail(msg="管理者権限が必要です")
-            
+
         monthly = await attendance_controller.approve_monthly_attendance(
-            monthly_id=data.monthly_attendance_id,
-            approved_by=user_id,
-            remark=data.remark
+            monthly_id=data.monthly_attendance_id, approved_by=user_id, remark=data.remark
         )
         result = await monthly.to_dict()
         return Success(data=result)
@@ -765,16 +731,16 @@ async def approve_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
 async def reject_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
     """
     月次考勤を拒绝（管理者機能）
-    
+
     機能:
     - 提交済みの月次考勤を拒绝
     - 拒绝后状态回到draft，可以重新提交
     - 拒绝者情報と拒绝日時を記録
-    
+
     拒绝條件:
     - pending状态である
     - 管理者権限を持つ
-    
+
     Args:
         data: 拒绝データ（月次考勤ID、備考）
     """
@@ -782,15 +748,13 @@ async def reject_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
         user_id = CTX_USER_ID.get()
         if not user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         # 管理者権限チェック（将来的に実装）
         # if not await check_manager_permission(user_id):
         #     return Fail(msg="管理者権限が必要です")
-            
+
         monthly = await attendance_controller.reject_monthly_attendance(
-            monthly_id=data.monthly_attendance_id,
-            approved_by=user_id,
-            remark=data.remark
+            monthly_id=data.monthly_attendance_id, approved_by=user_id, remark=data.remark
         )
         result = await monthly.to_dict()
         return Success(data=result)
@@ -801,21 +765,21 @@ async def reject_monthly_attendance(data: ApproveMonthlyAttendanceSchema):
 @router.get("/monthly/status", summary="月次考勤状态取得")
 async def get_monthly_attendance_status(
     year_month: str = Query(None, description="対象年月（YYYY-MM）"),
-    user_id: Optional[int] = Query(None, description="ユーザーID（管理者用、未指定時は自分）")
+    user_id: Optional[int] = Query(None, description="ユーザーID（管理者用、未指定時は自分）"),
 ):
     """
     月次考勤状态を取得
-    
+
     機能:
     - 指定年月の月次考勤状态と統計データを取得
     - 提交状态、承認情報を含む
     - 計算済み統計データまたはリアルタイム計算データを返却
-    
+
     返却データ:
     - 基本情報（年月、状态、提交・承認日時等）
     - 統計データ（出勤天数、実働时間、残業时间等）
     - 提交・承認履歴
-    
+
     Args:
         year_month: 対象年月（YYYY-MM形式）
         user_id: 対象ユーザーID（管理者用、未指定時は自分のデータ）
@@ -824,18 +788,17 @@ async def get_monthly_attendance_status(
         current_user_id = CTX_USER_ID.get()
         if not current_user_id:
             return Fail(msg="ユーザー情報が取得できません")
-            
+
         # ユーザーID未指定時は自分のデータを取得
         target_user_id = user_id if user_id else current_user_id
-        
+
         # 他人のデータを参照する場合の権限チェック（将来的に実装）
         # if user_id and user_id != current_user_id:
         #     if not await check_manager_permission(current_user_id):
         #         return Fail(msg="他のユーザーのデータを参照する権限がありません")
-            
+
         status = await attendance_controller.get_monthly_attendance_status(
-            user_id=target_user_id,
-            year_month=year_month
+            user_id=target_user_id, year_month=year_month
         )
         return Success(data=status)
     except Exception as e:
@@ -844,22 +807,19 @@ async def get_monthly_attendance_status(
 
 @router.get("/export", summary="出勤データエクスポート")
 async def export_attendance_data(
-        user_id: Optional[int] = Query(None, description="ユーザーID"),
-        year_month: Optional[str] = Query(None, description="対象年月（YYYY-MM）"),
-        include_summary: bool = Query(True, description="サマリー情報を含む")
+    user_id: Optional[int] = Query(None, description="ユーザーID"),
+    year_month: Optional[str] = Query(None, description="対象年月（YYYY-MM）"),
+    include_summary: bool = Query(True, description="サマリー情報を含む"),
 ):
     try:
         current_user_id = CTX_USER_ID.get()
         target_user_id = user_id if user_id else current_user_id
 
         response = await attendance_controller.get_attendance_data_for_export(
-            user_id=target_user_id,
-            year_month=year_month,
-            include_summary=include_summary
+            user_id=target_user_id, year_month=year_month, include_summary=include_summary
         )
 
         return response
-
 
     except Exception as e:
         print(str(e))

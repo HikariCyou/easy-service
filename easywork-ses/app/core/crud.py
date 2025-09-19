@@ -1,5 +1,4 @@
-from typing import (Any, Dict, Generic, List, NewType, Tuple, Type, TypeVar,
-                    Union)
+from typing import Any, Dict, Generic, List, NewType, Tuple, Type, TypeVar, Union
 
 from pydantic import BaseModel
 from tortoise.expressions import Q

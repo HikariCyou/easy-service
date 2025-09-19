@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -46,9 +46,8 @@ class UpdateClientCompanySchema(BaseModel):
     remark: Optional[str] = Field(None, description="備考")
 
 
-
-
 # === 銀行口座関連 ===
+
 
 class AddClientBankAccountSchema(BaseModel):
     client_company_id: int = Field(..., description="所属顧客会社ID")
@@ -79,6 +78,7 @@ class UpdateClientBankAccountSchema(BaseModel):
 
 
 # === 契約関連 ===
+
 
 class AddClientCompanyContractSchema(BaseModel):
     client_company_id: int = Field(..., description="契約先顧客会社ID")

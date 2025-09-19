@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class CreateEmployeeEvaluationSchema(BaseModel):
     """自社社員評価作成schema"""
-    
+
     employee_id: int = Field(..., description="対象社員ID", example=1)
     case_id: Optional[int] = Field(None, description="評価対象案件ID", example=1)
     contract_id: Optional[int] = Field(None, description="評価対象契約ID", example=1)
@@ -26,7 +26,7 @@ class CreateEmployeeEvaluationSchema(BaseModel):
 
 class UpdateEmployeeEvaluationSchema(BaseModel):
     """自社社員評価更新schema"""
-    
+
     case_id: Optional[int] = Field(None, description="評価対象案件ID", example=1)
     contract_id: Optional[int] = Field(None, description="評価対象契約ID", example=1)
     technical_skill: Optional[int] = Field(None, description="技術力 (1-5)", example=5, ge=1, le=5)
@@ -45,7 +45,7 @@ class UpdateEmployeeEvaluationSchema(BaseModel):
 
 class EmployeeEvaluationListSchema(BaseModel):
     """自社社員評価一覧schema"""
-    
+
     id: int = Field(..., description="評価ID")
     employee_id: int = Field(..., description="対象社員ID")
     employee_name: Optional[str] = Field(None, description="対象社員名")
@@ -72,7 +72,7 @@ class EmployeeEvaluationListSchema(BaseModel):
 
 class EmployeeEvaluationDetailSchema(EmployeeEvaluationListSchema):
     """自社社員評価詳細schema"""
-    
+
     # 関連情報
     employee: Optional[dict] = Field(None, description="社員情報")
     case: Optional[dict] = Field(None, description="案件情報")
@@ -81,7 +81,7 @@ class EmployeeEvaluationDetailSchema(EmployeeEvaluationListSchema):
 
 class EmployeeEvaluationSummarySchema(BaseModel):
     """自社社員評価統計schema"""
-    
+
     total_evaluations: int = Field(..., description="総評価数")
     average_overall_rating: float = Field(..., description="平均総合評価")
     average_technical_skill: float = Field(..., description="平均技術力")
@@ -95,7 +95,7 @@ class EmployeeEvaluationSummarySchema(BaseModel):
 
 class EmployeeEvaluationSearchSchema(BaseModel):
     """自社社員評価検索schema"""
-    
+
     employee_id: Optional[int] = Field(None, description="社員IDで絞り込み")
     case_id: Optional[int] = Field(None, description="案件IDで絞り込み")
     contract_id: Optional[int] = Field(None, description="契約IDで絞り込み")

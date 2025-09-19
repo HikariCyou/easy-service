@@ -6,12 +6,18 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
-from app.core.exceptions import (DoesNotExist, DoesNotExistHandle,
-                                 HTTPException, HttpExcHandle, IntegrityError,
-                                 IntegrityHandle, RequestValidationError,
-                                 RequestValidationHandle,
-                                 ResponseValidationError,
-                                 ResponseValidationHandle)
+from app.core.exceptions import (
+    DoesNotExist,
+    DoesNotExistHandle,
+    HTTPException,
+    HttpExcHandle,
+    IntegrityError,
+    IntegrityHandle,
+    RequestValidationError,
+    RequestValidationHandle,
+    ResponseValidationError,
+    ResponseValidationHandle,
+)
 from app.log import logger
 from app.settings.config import settings
 

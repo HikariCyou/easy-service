@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, validator
 
@@ -8,11 +8,12 @@ from app.models.enums import PersonType
 
 class PersonEvaluationBase(BaseModel):
     """人材評価基本スキーマ"""
+
     person_type: PersonType = Field(..., description="人材タイプ")
     person_id: int = Field(..., description="対象人材ID")
     case_id: Optional[int] = Field(None, description="評価対象案件ID")
     contract_id: Optional[int] = Field(None, description="評価対象契約ID")
-    
+
     technical_skill: int = Field(..., ge=1, le=5, description="技術力 (1-5)")
     communication: int = Field(..., ge=1, le=5, description="コミュニケーション力 (1-5)")
     reliability: int = Field(..., ge=1, le=5, description="信頼性 (1-5)")
@@ -20,20 +21,20 @@ class PersonEvaluationBase(BaseModel):
     independence: Optional[int] = Field(None, ge=1, le=5, description="自立性 (1-5)")
     delivery_quality: Optional[int] = Field(None, ge=1, le=5, description="成果物品質 (1-5)")
     overall_rating: int = Field(..., ge=1, le=5, description="総合評価 (1-5)")
-    
+
     good_points: Optional[str] = Field(None, description="良い点")
     improvement_points: Optional[str] = Field(None, description="改善点")
     recommendation: bool = Field(..., description="次回推薦可能か")
-    
+
     evaluation_date: date = Field(..., description="評価日")
     remark: Optional[str] = Field(None, description="備考")
 
     evaluator_id: Optional[int] = Field(None, description="評価者ID")
 
-    @validator('independence', 'delivery_quality')
+    @validator("independence", "delivery_quality")
     def validate_extended_fields(cls, v, values):
         """拡張フィールドのバリデーション"""
-        person_type = values.get('person_type')
+        person_type = values.get("person_type")
         if person_type == PersonType.BP_EMPLOYEE:
             # BP社員の場合は強制的にNoneに設定
             return None
@@ -43,14 +44,16 @@ class PersonEvaluationBase(BaseModel):
 
 class CreatePersonEvaluationSchema(PersonEvaluationBase):
     """人材評価作成スキーマ"""
+
     pass
 
 
 class UpdatePersonEvaluationSchema(BaseModel):
     """人材評価更新スキーマ"""
+
     case_id: Optional[int] = Field(None, description="評価対象案件ID")
     contract_id: Optional[int] = Field(None, description="評価対象契約ID")
-    
+
     technical_skill: Optional[int] = Field(None, ge=1, le=5, description="技術力 (1-5)")
     communication: Optional[int] = Field(None, ge=1, le=5, description="コミュニケーション力 (1-5)")
     reliability: Optional[int] = Field(None, ge=1, le=5, description="信頼性 (1-5)")
@@ -58,17 +61,18 @@ class UpdatePersonEvaluationSchema(BaseModel):
     independence: Optional[int] = Field(None, ge=1, le=5, description="自立性 (1-5)")
     delivery_quality: Optional[int] = Field(None, ge=1, le=5, description="成果物品質 (1-5)")
     overall_rating: Optional[int] = Field(None, ge=1, le=5, description="総合評価 (1-5)")
-    
+
     good_points: Optional[str] = Field(None, description="良い点")
     improvement_points: Optional[str] = Field(None, description="改善点")
     recommendation: Optional[bool] = Field(None, description="次回推薦可能か")
-    
+
     evaluation_date: Optional[date] = Field(None, description="評価日")
     remark: Optional[str] = Field(None, description="備考")
 
 
 class PersonEvaluationDetailSchema(PersonEvaluationBase):
     """人材評価詳細スキーマ"""
+
     id: int = Field(..., description="評価ID")
     evaluator_id: int = Field(..., description="評価者ID")
     person_name: Optional[str] = Field(None, description="対象人材名")
@@ -83,6 +87,7 @@ class PersonEvaluationDetailSchema(PersonEvaluationBase):
 
 class PersonEvaluationListSchema(BaseModel):
     """人材評価リストスキーマ"""
+
     id: int = Field(..., description="評価ID")
     person_type: PersonType = Field(..., description="人材タイプ")
     person_id: int = Field(..., description="対象人材ID")
@@ -99,6 +104,7 @@ class PersonEvaluationListSchema(BaseModel):
 
 class PersonEvaluationSummarySchema(BaseModel):
     """人材評価サマリースキーマ"""
+
     person_type: PersonType = Field(..., description="人材タイプ")
     person_id: int = Field(..., description="対象人材ID")
     person_name: Optional[str] = Field(None, description="対象人材名")
@@ -116,32 +122,34 @@ class PersonEvaluationSummarySchema(BaseModel):
 
 class PersonEvaluationSearchSchema(BaseModel):
     """人材評価検索スキーマ"""
+
     person_type: Optional[PersonType] = Field(None, description="人材タイプ")
     person_id: Optional[int] = Field(None, description="対象人材ID")
     case_id: Optional[int] = Field(None, description="案件ID")
     contract_id: Optional[int] = Field(None, description="契約ID")
     evaluator_id: Optional[int] = Field(None, description="評価者ID")
-    
+
     min_overall_rating: Optional[int] = Field(None, ge=1, le=5, description="最小総合評価")
     max_overall_rating: Optional[int] = Field(None, ge=1, le=5, description="最大総合評価")
-    
+
     recommendation: Optional[bool] = Field(None, description="推薦可能かどうか")
-    
+
     evaluation_date_from: Optional[date] = Field(None, description="評価日開始")
     evaluation_date_to: Optional[date] = Field(None, description="評価日終了")
-    
+
     good_points_keyword: Optional[str] = Field(None, description="良い点キーワード")
     improvement_points_keyword: Optional[str] = Field(None, description="改善点キーワード")
 
 
 class PersonEvaluationStatsSchema(BaseModel):
     """人材評価統計スキーマ"""
+
     period: str = Field(..., description="集計期間")
     total_evaluations: int = Field(..., description="総評価数")
     average_overall_rating: float = Field(..., description="平均総合評価")
     recommendation_rate: float = Field(..., description="推薦率 (%)")
     top_rated_count: int = Field(..., description="高評価件数 (4点以上)")
-    
+
     # 人材タイプ別統計
     bp_employee_count: int = Field(0, description="BP社員評価数")
     freelancer_count: int = Field(0, description="フリーランス評価数")
@@ -150,6 +158,7 @@ class PersonEvaluationStatsSchema(BaseModel):
 
 class PersonTopRatedSchema(BaseModel):
     """高評価人材スキーマ"""
+
     person_type: PersonType = Field(..., description="人材タイプ")
     person_id: int = Field(..., description="人材ID")
     person_name: str = Field(..., description="人材名")
@@ -162,6 +171,7 @@ class PersonTopRatedSchema(BaseModel):
 # レスポンス用のスキーマ
 class PersonEvaluationListResponse(BaseModel):
     """人材評価リストレスポンス"""
+
     evaluations: List[PersonEvaluationListSchema]
     total: int
     page: int
@@ -170,6 +180,7 @@ class PersonEvaluationListResponse(BaseModel):
 
 class PersonEvaluationPaginatedResponse(BaseModel):
     """人材評価ページネーションレスポンス"""
+
     data: List[PersonEvaluationDetailSchema]
     total: int
     page: int

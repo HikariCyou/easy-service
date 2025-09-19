@@ -1,4 +1,3 @@
-
 import httpx
 
 from app.settings.config import settings

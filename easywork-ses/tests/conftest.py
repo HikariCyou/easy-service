@@ -1,8 +1,9 @@
-import pytest
 import asyncio
-from tortoise import Tortoise
+
+import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+from tortoise import Tortoise
 
 from app import app
 
@@ -18,10 +19,7 @@ def event_loop():
 @pytest.fixture(scope="function")
 async def db():
     """Initialize test database for each test."""
-    await Tortoise.init(
-        db_url="sqlite://:memory:",
-        modules={"models": ["app.models"]}
-    )
+    await Tortoise.init(db_url="sqlite://:memory:", modules={"models": ["app.models"]})
     await Tortoise.generate_schemas()
     yield
     await Tortoise.close_connections()

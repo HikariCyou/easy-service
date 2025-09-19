@@ -1,11 +1,11 @@
 import logging
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email.header import Header
 from email import encoders, utils
-from typing import List, Dict, Any
+from email.header import Header
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -36,15 +36,15 @@ class MailSender:
             connection = self.get_connection()
 
             # 默认发送HTML邮件，支持富文本格式
-            content_type = 'html' if is_html else 'plain'
-            msg = MIMEText(body, content_type, 'utf-8')
+            content_type = "html" if is_html else "plain"
+            msg = MIMEText(body, content_type, "utf-8")
 
             # 关键：设置所有必要的邮件头，模拟Java MailUtil
-            msg['Subject'] = subject  # 不要Header编码，直接使用
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            msg['Date'] = utils.formatdate(localtime=True)
-            msg['Message-ID'] = utils.make_msgid()
+            msg["Subject"] = subject  # 不要Header编码，直接使用
+            msg["From"] = self.from_email
+            msg["To"] = to_email
+            msg["Date"] = utils.formatdate(localtime=True)
+            msg["Message-ID"] = utils.make_msgid()
 
             # 发送
             connection.sendmail(self.from_email, [to_email], msg.as_string())
@@ -64,21 +64,21 @@ class MailSender:
         attachment_files: List[tuple] = None,
         cc_emails: List[str] = None,
         bcc_emails: List[str] = None,
-        is_html: bool = True
+        is_html: bool = True,
     ):
         try:
             connection = self.get_connection()
 
             # 确定邮件内容和类型
             email_content = html_body or body or "Hello World"
-            content_type = 'html' if (is_html or html_body) else 'plain'
+            content_type = "html" if (is_html or html_body) else "plain"
 
             # 如果有附件，使用MIMEMultipart
             if attachment_files:
                 msg = MIMEMultipart()
 
                 # 添加文本内容 - 支持HTML格式
-                text_part = MIMEText(email_content, content_type, 'utf-8')
+                text_part = MIMEText(email_content, content_type, "utf-8")
                 msg.attach(text_part)
 
                 # 添加附件 - 完全按照Django方式
@@ -88,32 +88,28 @@ class MailSender:
                         file_content = attachment[1]
 
                         # 创建附件
-                        part = MIMEBase('application', 'octet-stream')
+                        part = MIMEBase("application", "octet-stream")
                         part.set_payload(file_content)
                         encoders.encode_base64(part)
 
                         # 设置附件头 - 按照Django方式
-                        part.add_header(
-                            'Content-Disposition',
-                            'attachment',
-                            filename=filename
-                        )
+                        part.add_header("Content-Disposition", "attachment", filename=filename)
                         msg.attach(part)
             else:
                 # 没有附件，使用HTML或纯文本
-                msg = MIMEText(email_content, content_type, 'utf-8')
+                msg = MIMEText(email_content, content_type, "utf-8")
 
             # 设置相同的邮件头 - 保持与工作版本一致
-            msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            msg['Date'] = utils.formatdate(localtime=True)
-            msg['Message-ID'] = utils.make_msgid()
+            msg["Subject"] = subject
+            msg["From"] = self.from_email
+            msg["To"] = to_email
+            msg["Date"] = utils.formatdate(localtime=True)
+            msg["Message-ID"] = utils.make_msgid()
 
             # 处理抄送
             recipients = [to_email]
             if cc_emails:
-                msg['Cc'] = ', '.join(cc_emails)
+                msg["Cc"] = ", ".join(cc_emails)
                 recipients.extend(cc_emails)
             if bcc_emails:
                 recipients.extend(bcc_emails)
@@ -129,10 +125,7 @@ class MailSender:
             raise
 
     async def send_mail_with_attachments(
-        self,
-        mail: str,
-        attachment_files: List[tuple] = None,
-        template_params: Dict[str, Any] = None
+        self, mail: str, attachment_files: List[tuple] = None, template_params: Dict[str, Any] = None
     ):
         if template_params:
             subject = template_params.get("subject", "")
@@ -160,7 +153,7 @@ class MailSender:
             attachment_files=attachment_files,
             cc_emails=cc_emails,
             bcc_emails=bcc_emails,
-            is_html=is_html
+            is_html=is_html,
         )
 
 
@@ -190,16 +183,12 @@ def test_simple_mail():
         </body>
         </html>
         """
-        mail_sender.send_simple_email(
-            to_email="742525070@qq.com",
-            subject="HTML邮件测试",
-            body=html_content,
-            is_html=True
-        )
+        mail_sender.send_simple_email(to_email="742525070@qq.com", subject="HTML邮件测试", body=html_content, is_html=True)
         print("=== HTML邮件测试成功 ===")
     except Exception as e:
         print(f"=== 测试失败: {e} ===")
         import traceback
+
         traceback.print_exc()
 
 
@@ -209,10 +198,8 @@ def test_attachment_mail():
         print("=== 开始HTML附件邮件测试 ===")
 
         # 创建测试附件
-        test_content = "这是测试附件内容".encode('utf-8')
-        attachment_files = [
-            ("测试文件.txt", test_content)
-        ]
+        test_content = "这是测试附件内容".encode("utf-8")
+        attachment_files = [("测试文件.txt", test_content)]
 
         # HTML邮件内容
         html_content = """
@@ -239,12 +226,13 @@ def test_attachment_mail():
             subject="HTML附件测试邮件",
             html_body=html_content,
             attachment_files=attachment_files,
-            is_html=True
+            is_html=True,
         )
         print("=== HTML附件测试成功 ===")
     except Exception as e:
         print(f"=== 附件测试失败: {e} ===")
         import traceback
+
         traceback.print_exc()
 
 

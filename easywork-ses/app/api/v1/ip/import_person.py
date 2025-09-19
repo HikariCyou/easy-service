@@ -1,16 +1,17 @@
-from typing import Optional, List
-from fastapi import APIRouter, Query, HTTPException, Body
+from typing import List, Optional
+
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from app.controllers.import_person import import_person_controller
-from app.schemas import Success, Fail
+from app.schemas import Fail, Success
 from app.schemas.import_person import (
-    ImportPersonListSchema,
+    ImportPersonCurrentAssignmentSchema,
     ImportPersonDetailSchema,
     ImportPersonHistorySchema,
-    ImportPersonCurrentAssignmentSchema,
-    ImportPersonStatsSchema,
+    ImportPersonListSchema,
     ImportPersonSearchSchema,
-    UpdatePersonStatusSchema
+    ImportPersonStatsSchema,
+    UpdatePersonStatusSchema,
 )
 
 router = APIRouter()
@@ -34,11 +35,11 @@ async def get_staff_list(
     visa_expiring_within_days: Optional[int] = Query(None, description="ビザN日以内期限切れ"),
     has_active_case: Optional[bool] = Query(None, description="アクティブ案件あり"),
     case_id: Optional[int] = Query(None, description="特定案件IDフィルター"),
-    include_inactive: bool = Query(False, description="非アクティブ要員を含む")
+    include_inactive: bool = Query(False, description="非アクティブ要員を含む"),
 ):
     """
     すべての要員リストを取得（作業ステータス付き）
-    
+
     対応するフィルター条件：
     - 基本情報：氏名、コード、要員タイプ、就業ステータス
     - スキルフィルター：スキル名、経験年数
@@ -79,12 +80,9 @@ async def get_staff_list(
             search_params["case_id"] = case_id
 
         result = await import_person_controller.get_staff_list(
-            page=page,
-            page_size=page_size,
-            search_params=search_params,
-            include_inactive=include_inactive
+            page=page, page_size=page_size, search_params=search_params, include_inactive=include_inactive
         )
-        
+
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
         return Fail(msg=str(e))
@@ -96,18 +94,16 @@ async def get_staff_detail(
 ):
     """
     要員詳細を取得（履歴付き）
-    
+
     person_typeを指定することでクエリ性能を最適化できます。
     指定しない場合、システムが自動的に対応する要員タイプを検索します。
     """
     try:
-        detail = await import_person_controller.get_staff_detail(
-            person_id=id
-        )
-        
+        detail = await import_person_controller.get_staff_detail(person_id=id)
+
         if not detail:
             return Fail(msg="要員が見つかりません")
-        
+
         return Success(data=detail.dict())
     except Exception as e:
         return Fail(msg=str(e))
@@ -117,11 +113,11 @@ async def get_staff_detail(
 async def get_staff_history(
     id: int = Query(..., description="要員ID"),
     page: Optional[int] = Query(1, description="ページ番号"),
-    pageSize: Optional[int] = Query(10, description="ページサイズ")
+    pageSize: Optional[int] = Query(10, description="ページサイズ"),
 ):
     """
     要員の作業履歴を取得
-    
+
     含まれる内容：
     - 過去の契約記録
     - 案件参加状況
@@ -129,13 +125,9 @@ async def get_staff_history(
     - 顧客情報
     """
     try:
-        history , total = await import_person_controller.get_staff_history(
-            person_id=id,
-            page = page,
-            page_size= pageSize
-        )
-        
-        return Success(data=[item.dict() for item in history] , total=total)
+        history, total = await import_person_controller.get_staff_history(person_id=id, page=page, page_size=pageSize)
+
+        return Success(data=[item.dict() for item in history], total=total)
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -146,7 +138,7 @@ async def get_staff_current_assignments(
 ):
     """
     要員の現在の案件と契約情報を取得
-    
+
     含まれる内容：
     - 現在アクティブな案件
     - 現在有効な契約
@@ -157,22 +149,20 @@ async def get_staff_current_assignments(
         assignments = await import_person_controller.get_staff_current_assignments(
             person_id=id,
         )
-        
+
         if not assignments:
             return Fail(msg="要員が見つかりません")
-        
+
         return Success(data=assignments.dict())
     except Exception as e:
         return Fail(msg=str(e))
 
 
 @router.put("/update-status", summary="要員ステータス更新")
-async def update_staff_status(
-    data: UpdatePersonStatusSchema = Body(..., description="ステータス更新データ")
-):
+async def update_staff_status(data: UpdatePersonStatusSchema = Body(..., description="ステータス更新データ")):
     """
     要員の作業ステータスを更新
-    
+
     更新可能なステータス：
     - 就業ステータス (employment_status)
     - アクティブ状態 (is_active)
@@ -182,12 +172,12 @@ async def update_staff_status(
         success = await import_person_controller.update_staff_status(
             person_id=data.person_id,
             person_type=data.person_type,
-            status_data=data.dict(exclude={'person_id', 'person_type'}, exclude_none=True)
+            status_data=data.dict(exclude={"person_id", "person_type"}, exclude_none=True),
         )
-        
+
         if not success:
             return Fail(msg="要員が見つからないか更新に失敗しました")
-        
+
         return Success(data={"success": True})
     except Exception as e:
         return Fail(msg=str(e))
@@ -197,7 +187,7 @@ async def update_staff_status(
 async def get_staff_stats():
     """
     要員統計情報を取得
-    
+
     含まれる内容：
     - 総数統計：タイプ別、ステータス別、国籍別分類
     - ビザ期限切れ警告
@@ -206,7 +196,7 @@ async def get_staff_stats():
     """
     try:
         stats = await import_person_controller.get_staff_stats()
-        
+
         return Success(data=stats.dict())
     except Exception as e:
         return Fail(msg=str(e))
@@ -216,22 +206,19 @@ async def get_staff_stats():
 async def search_staff(
     search_schema: ImportPersonSearchSchema = Body(..., description="検索条件"),
     page: int = Query(1, ge=1, description="ページ番号"),
-    page_size: int = Query(10, ge=1, le=100, description="ページサイズ")
+    page_size: int = Query(10, ge=1, le=100, description="ページサイズ"),
 ):
     """
     要員の高度検索
-    
+
     複雑な検索条件の組み合わせをサポート。
     /listエンドポイントの拡張版で、より柔軟な検索機能を提供。
     """
     try:
         result = await import_person_controller.get_staff_list(
-            page=page,
-            page_size=page_size,
-            search_params=search_schema.dict(exclude_none=True),
-            include_inactive=False
+            page=page, page_size=page_size, search_params=search_schema.dict(exclude_none=True), include_inactive=False
         )
-        
+
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
         return Fail(msg=str(e))
@@ -243,24 +230,20 @@ async def export_staff_data(
     person_type: Optional[str] = Query(None, description="要員タイプフィルター"),
     employment_status: Optional[str] = Query(None, description="就業ステータスフィルター"),
     include_skills: bool = Query(False, description="スキル情報を含む"),
-    include_history: bool = Query(False, description="履歴情報を含む")
+    include_history: bool = Query(False, description="履歴情報を含む"),
 ):
     """
     要員データをエクスポート
-    
+
     対応形式：Excel、CSV、PDF
     含める情報範囲を選択可能
-    
+
     注意：このエンドポイントは予約済みです。具体的な実装はエクスポート要件に応じて開発が必要です。
     """
     try:
         # エクスポート機能の予約エンドポイント
         # 実際の実装時はformat パラメータに応じて対応形式のファイルを生成
-        return Success(data={
-            "format": format,
-            "download_url": None,
-            "note": "エクスポート機能は今後のバージョンで提供予定です"
-        })
+        return Success(data={"format": format, "download_url": None, "note": "エクスポート機能は今後のバージョンで提供予定です"})
     except Exception as e:
         return Fail(msg=str(e))
 
@@ -269,14 +252,14 @@ async def export_staff_data(
 async def get_staff_dashboard():
     """
     要員管理ダッシュボードデータを取得
-    
+
     統計情報、警告情報、トレンドデータなどを統合し、
     管理画面向けのワンストップデータサポートを提供。
     """
     try:
         # 基本統計を取得
         stats = await import_person_controller.get_staff_stats()
-        
+
         # ダッシュボードに必要な追加データをここに追加可能
         # 例：月次トレンド、トップスキル、警告リストなど
         dashboard_data = {
@@ -289,10 +272,10 @@ async def get_staff_dashboard():
             "trends": {
                 "monthly_staff_growth": [],  # 実装が必要
                 "skill_demand_ranking": [],  # 実装が必要
-                "average_unit_price_trend": []  # 実装が必要
-            }
+                "average_unit_price_trend": [],  # 実装が必要
+            },
         }
-        
+
         return Success(data=dashboard_data)
     except Exception as e:
         return Fail(msg=str(e))

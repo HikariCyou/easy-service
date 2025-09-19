@@ -1,13 +1,15 @@
 from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
-from app.models.client import ClientCompany, ClientContact, ClientCompanyContract
 from app.models.bank import ClientBankAccount
-from app.schemas.cp import AddClientCompanySchema, UpdateClientCompanySchema
+from app.models.client import ClientCompany, ClientCompanyContract, ClientContact
 from app.schemas.client import (
-    AddClientBankAccountSchema, UpdateClientBankAccountSchema,
-    AddClientCompanyContractSchema, UpdateClientCompanyContractSchema
+    AddClientBankAccountSchema,
+    AddClientCompanyContractSchema,
+    UpdateClientBankAccountSchema,
+    UpdateClientCompanyContractSchema,
 )
+from app.schemas.cp import AddClientCompanySchema, UpdateClientCompanySchema
 from app.utils.common import clean_dict
 
 
@@ -43,15 +45,15 @@ class CPCompanyController:
             await company.delete()
         return company
 
-
     # === 銀行口座管理 ===
 
     async def get_bank_accounts_by_company(self, client_company_id: int):
         """顧客会社の銀行口座一覧取得"""
-        accounts = await ClientBankAccount.filter(
-            client_company_id=client_company_id,
-            is_active=True
-        ).prefetch_related("bank", "branch").all()
+        accounts = (
+            await ClientBankAccount.filter(client_company_id=client_company_id, is_active=True)
+            .prefetch_related("bank", "branch")
+            .all()
+        )
         return accounts
 
     async def add_bank_account(self, account_data: AddClientBankAccountSchema):
@@ -64,7 +66,7 @@ class CPCompanyController:
         """銀行口座更新"""
         account = await ClientBankAccount.get_or_none(id=account_data.id)
         if account:
-            dict_data = clean_dict(account_data.model_dump(exclude_unset=True, exclude={'id'}))
+            dict_data = clean_dict(account_data.model_dump(exclude_unset=True, exclude={"id"}))
             account.update_from_dict(dict_data)
             await account.save()
         return account
@@ -80,16 +82,23 @@ class CPCompanyController:
 
     # === 契約管理 ===
 
-    async def list_client_contracts(self, page: int = 1, page_size: int = 10, client_company_id: int = None, search: Q = None, orders: list = []):
+    async def list_client_contracts(
+        self, page: int = 1, page_size: int = 10, client_company_id: int = None, search: Q = None, orders: list = []
+    ):
         """顧客会社契約一覧取得"""
         query = ClientCompanyContract.all()
         if client_company_id:
             query = query.filter(client_company_id=client_company_id)
         if search:
             query = query.filter(search)
-        
+
         total = await query.count()
-        contracts = await query.prefetch_related("client_company").offset((page - 1) * page_size).limit(page_size).order_by(*orders)
+        contracts = (
+            await query.prefetch_related("client_company")
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .order_by(*orders)
+        )
         return contracts, total
 
     async def get_contract_by_id(self, contract_id: int):
@@ -103,20 +112,20 @@ class CPCompanyController:
         client_company = await ClientCompany.get_or_none(id=contract_data.client_company_id)
         if not client_company:
             raise ValueError("指定された顧客会社が見つかりません")
-        
+
         data = clean_dict(contract_data.model_dump(exclude_unset=True))
-        
+
         # contract_documentsの処理
-        if 'contract_documents' in data and data['contract_documents']:
+        if "contract_documents" in data and data["contract_documents"]:
             # Pydantic modelをdictに変換
             documents = []
-            for doc in data['contract_documents']:
-                if hasattr(doc, 'model_dump'):
+            for doc in data["contract_documents"]:
+                if hasattr(doc, "model_dump"):
                     documents.append(doc.model_dump())
                 else:
                     documents.append(doc)
-            data['contract_documents'] = documents
-        
+            data["contract_documents"] = documents
+
         contract = await ClientCompanyContract.create(**data)
         return contract
 
@@ -124,18 +133,18 @@ class CPCompanyController:
         """顧客会社契約更新"""
         contract = await ClientCompanyContract.get_or_none(id=contract_data.id)
         if contract:
-            dict_data = clean_dict(contract_data.model_dump(exclude_unset=True, exclude={'id'}))
-            
+            dict_data = clean_dict(contract_data.model_dump(exclude_unset=True, exclude={"id"}))
+
             # contract_documentsの処理
-            if 'contract_documents' in dict_data and dict_data['contract_documents'] is not None:
+            if "contract_documents" in dict_data and dict_data["contract_documents"] is not None:
                 documents = []
-                for doc in dict_data['contract_documents']:
-                    if hasattr(doc, 'model_dump'):
+                for doc in dict_data["contract_documents"]:
+                    if hasattr(doc, "model_dump"):
                         documents.append(doc.model_dump())
                     else:
                         documents.append(doc)
-                dict_data['contract_documents'] = documents
-            
+                dict_data["contract_documents"] = documents
+
             contract.update_from_dict(dict_data)
             await contract.save()
         return contract

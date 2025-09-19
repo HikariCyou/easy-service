@@ -6,8 +6,12 @@ from fastapi.staticfiles import StaticFiles
 from tortoise import Tortoise
 
 from app.core.exceptions import SettingNotFound
-from app.core.init_app import (init_data, make_middlewares,
-                               register_exceptions, register_routers)
+from app.core.init_app import (
+    init_data,
+    make_middlewares,
+    register_exceptions,
+    register_routers,
+)
 
 try:
     from app.settings.config import settings

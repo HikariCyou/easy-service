@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 # 契約精算項目スキーマ
 class ContractCalculationItemCreate(BaseModel):
     """契約精算項目作成"""
+
     type: str = Field(..., description="項目種別", examples=["BASIC_SALARY", "OVERTIME_FEE", "TRANSPORTATION"])
     name: str = Field(..., description="項目名称", examples=["基本給", "残業代", "交通費"])
     amount: Optional[float] = Field(None, description="金額", examples=[40, 1.5, 10000])
@@ -38,11 +39,10 @@ class UpdateContract(CreateContract):
 # 契約変更関連のSchemas
 class ContractChangeRequest(BaseModel):
     """契約変更申請"""
+
     contract_id: int = Field(..., description="対象契約ID", examples=[1])
-    change_type: str = Field(..., description="変更種別", 
-                           examples=["契約更新", "早期解約", "条件変更", "期間延長", "期間短縮"])
-    change_reason: Optional[str] = Field(None, description="変更理由",
-                                       examples=["クライアント要望", "人材要望", "プロジェクト変更"])
+    change_type: str = Field(..., description="変更種別", examples=["契約更新", "早期解約", "条件変更", "期間延長", "期間短縮"])
+    change_reason: Optional[str] = Field(None, description="変更理由", examples=["クライアント要望", "人材要望", "プロジェクト変更"])
     effective_date: Optional[date] = Field(None, description="変更効力発生日")
     description: Optional[str] = Field(None, description="変更内容の詳細説明")
     requested_by: Optional[str] = Field(None, description="変更申請者")
@@ -50,16 +50,17 @@ class ContractChangeRequest(BaseModel):
 
 class EarlyTerminationRequest(BaseModel):
     """早期解約申請"""
+
     contract_id: int = Field(..., description="対象契約ID", examples=[1])
     termination_date: date = Field(..., description="解約日", examples=["2024-01-31"])
-    reason: str = Field(..., description="解約理由", 
-                       examples=["クライアント要望", "パフォーマンス問題", "プロジェクト変更"])
+    reason: str = Field(..., description="解約理由", examples=["クライアント要望", "パフォーマンス問題", "プロジェクト変更"])
     description: Optional[str] = Field(None, description="解約理由の詳細")
     requested_by: Optional[str] = Field(None, description="解約申請者")
 
 
 class ContractConditionUpdate(BaseModel):
     """契約条件変更"""
+
     contract_id: int = Field(..., description="対象契約ID", examples=[1])
     new_base_salary: Optional[float] = Field(None, description="新基本給", examples=[650000.0])
     new_working_hours: Optional[float] = Field(None, description="新標準稼働時間", examples=[180.0])
@@ -73,16 +74,16 @@ class ContractConditionUpdate(BaseModel):
 
 class ContractAmendmentCreate(BaseModel):
     """契約修正書作成"""
+
     original_contract_id: int = Field(..., description="元契約ID", examples=[1])
-    amendment_title: str = Field(..., description="修正書タイトル", 
-                                examples=["単価変更に関する修正契約書"])
+    amendment_title: str = Field(..., description="修正書タイトル", examples=["単価変更に関する修正契約書"])
     amendment_type: str = Field(..., description="修正種別", examples=["条件変更"])
     amendment_reason: str = Field(..., description="修正理由", examples=["クライアント要望"])
     amendment_details: str = Field(..., description="修正内容詳細")
-    
+
     effective_start_date: date = Field(..., description="修正効力開始日")
     effective_end_date: Optional[date] = Field(None, description="修正効力終了日")
-    
+
     # 修正後の契約条件
     new_unit_price: Optional[float] = Field(None, description="修正後単価")
     new_contract_end_date: Optional[date] = Field(None, description="修正後契約終了日")
@@ -91,15 +92,16 @@ class ContractAmendmentCreate(BaseModel):
 
 class ContractAmendmentApproval(BaseModel):
     """契約修正書承認"""
+
     amendment_id: int = Field(..., description="修正書ID", examples=[1])
-    approval_type: str = Field(..., description="承認種別", 
-                              examples=["client", "company", "personnel"])
+    approval_type: str = Field(..., description="承認種別", examples=["client", "company", "personnel"])
     signature: str = Field(..., description="署名者", examples=["田中太郎"])
     comment: Optional[str] = Field(None, description="承認コメント")
 
 
 class ContractHistoryResponse(BaseModel):
     """契約変更履歴レスポンス"""
+
     id: int = Field(..., description="履歴ID")
     contract_id: int = Field(..., description="契約ID")
     change_type: str = Field(..., description="変更種別")
@@ -116,6 +118,7 @@ class ContractHistoryResponse(BaseModel):
 
 class ContractAmendmentResponse(BaseModel):
     """契約修正書レスポンス"""
+
     id: int = Field(..., description="修正書ID")
     original_contract_id: int = Field(..., description="元契約ID")
     amendment_number: str = Field(..., description="修正書番号")
@@ -133,11 +136,13 @@ class ContractAmendmentResponse(BaseModel):
 
 class ContractCalculationRequest(BaseModel):
     """契約精算計算リクエスト"""
+
     actual_hours: float = Field(..., description="実稼働時間", examples=[175.5])
 
 
 class ContractItemCreate(BaseModel):
     """契約精算項目作成"""
+
     item_name: str = Field(..., description="項目名称", examples=["交通費", "住宅手当", "欠勤控除"])
     item_type: str = Field(..., description="項目種別", examples=["交通費", "手当", "欠勤控除"])
     amount: Optional[float] = Field(None, description="金額", examples=[10000.0, 1.5])
@@ -149,6 +154,7 @@ class ContractItemCreate(BaseModel):
 
 class ContractItemUpdate(BaseModel):
     """契約精算項目更新"""
+
     item_name: Optional[str] = Field(None, description="項目名称")
     item_type: Optional[str] = Field(None, description="項目種別")
     amount: Optional[float] = Field(None, description="金額")
@@ -160,6 +166,7 @@ class ContractItemUpdate(BaseModel):
 
 class ContractItemResponse(BaseModel):
     """契約精算項目レスポンス"""
+
     id: int = Field(..., description="項目ID")
     item_name: str = Field(..., description="項目名称")
     item_type: str = Field(..., description="項目種別")
@@ -170,5 +177,3 @@ class ContractItemResponse(BaseModel):
     is_deduction: bool = Field(..., description="控除項目フラグ")
     sort_order: int = Field(..., description="表示順序")
     created_at: datetime = Field(..., description="作成日時")
-
-

@@ -7,15 +7,15 @@ from pydantic import ValidationError
 from app.controllers.personnel_unified import personnel_controller
 from app.schemas import Fail, Success
 from app.schemas.freelancer import (
-    CreateFreelancerSchema,
-    UpdateFreelancerSchema,
-    FreelancerSearchSchema,
-    CreateFreelancerSkillSchema,
-    UpdateFreelancerSkillSchema,
     BatchUpdateFreelancerSkillsSchema,
     CreateFreelancerEvaluationSchema,
-    FreelancerProjectMatchingSchema,
+    CreateFreelancerSchema,
+    CreateFreelancerSkillSchema,
     FreelancerBusinessStatsSchema,
+    FreelancerProjectMatchingSchema,
+    FreelancerSearchSchema,
+    UpdateFreelancerSchema,
+    UpdateFreelancerSkillSchema,
 )
 from app.utils.common import clean_dict
 
@@ -30,9 +30,7 @@ async def get_freelancer_list(
 ):
     """フリーランサー一覧を取得"""
     try:
-        freelancer_data, total = await personnel_controller.list_freelancers(
-            page=page, page_size=pageSize
-        )
+        freelancer_data, total = await personnel_controller.list_freelancers(page=page, page_size=pageSize)
         return Success(data=freelancer_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -131,15 +129,15 @@ async def get_freelancer_skills(
             return Fail(msg="フリーランサーが見つかりません")
 
         skills, total = await personnel_controller.get_personnel_skills(freelancer_id, page=page, page_size=pageSize)
-        
+
         # スキルデータを辞書形式に変換
         skills_data = []
         for skill_relation in skills:
             skill_dict = await skill_relation.to_dict()
-            if hasattr(skill_relation, 'skill') and skill_relation.skill:
-                skill_dict['skill'] = await skill_relation.skill.to_dict()
+            if hasattr(skill_relation, "skill") and skill_relation.skill:
+                skill_dict["skill"] = await skill_relation.skill.to_dict()
             skills_data.append(skill_dict)
-        
+
         return Success(data=skills_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -156,14 +154,14 @@ async def add_freelancer_skill(
         if not freelancer:
             return Fail(msg="フリーランサーが見つかりません")
 
-        skill_data = clean_dict( data.model_dump(exclude_none=True) ) if data else {}
+        skill_data = clean_dict(data.model_dump(exclude_none=True)) if data else {}
         skill_relation = await personnel_controller.add_personnel_skill(freelancer_id, skill_data)
-        
+
         # 結果を辞書形式に変換
         result = await skill_relation.to_dict()
-        if hasattr(skill_relation, 'skill') and skill_relation.skill:
-            result['skill'] = await skill_relation.skill.to_dict()
-        
+        if hasattr(skill_relation, "skill") and skill_relation.skill:
+            result["skill"] = await skill_relation.skill.to_dict()
+
         return Success(data=result, msg="スキルが正常に追加されました")
     except ValueError as e:
         return Fail(msg=str(e))
@@ -180,12 +178,12 @@ async def update_freelancer_skill(
     try:
         skill_data = data.model_dump(exclude_none=True) if data else {}
         skill_relation = await personnel_controller.update_personnel_skill(skill_id, skill_data)
-        
+
         # 結果を辞書形式に変換
         result = await skill_relation.to_dict()
-        if hasattr(skill_relation, 'skill') and skill_relation.skill:
-            result['skill'] = await skill_relation.skill.to_dict()
-        
+        if hasattr(skill_relation, "skill") and skill_relation.skill:
+            result["skill"] = await skill_relation.skill.to_dict()
+
         return Success(data=result, msg="スキルが正常に更新されました")
     except ValueError as e:
         return Fail(msg=str(e))
@@ -218,31 +216,32 @@ async def batch_update_freelancer_skills(
             return Fail(msg="フリーランサーが見つかりません")
 
         skills_data = data.skills if data else []
-        
+
         # 統一Controllerには一括更新メソッドがないので、手動実装
         from tortoise.transactions import in_transaction
+
         from app.models.personnel import PersonnelSkill
-        
+
         async with in_transaction():
             # 既存スキル削除
             await PersonnelSkill.filter(personnel_id=freelancer_id).delete()
-            
+
             # 新しいスキル追加
             for skill_item in skills_data:
                 try:
                     await personnel_controller.add_personnel_skill(freelancer_id, skill_item)
                 except ValueError:
                     continue
-        
+
         # 更新後のスキル一覧を取得
         skills, total = await personnel_controller.get_personnel_skills(freelancer_id)
         skills_dict = []
         for skill_relation in skills:
             skill_dict = await skill_relation.to_dict()
-            if hasattr(skill_relation, 'skill') and skill_relation.skill:
-                skill_dict['skill'] = await skill_relation.skill.to_dict()
+            if hasattr(skill_relation, "skill") and skill_relation.skill:
+                skill_dict["skill"] = await skill_relation.skill.to_dict()
             skills_dict.append(skill_dict)
-        
+
         return Success(data=skills_dict, msg="スキルが正常に一括更新されました")
     except Exception as e:
         return Fail(msg=str(e))
@@ -258,7 +257,7 @@ async def get_freelancer_evaluations(
     """フリーランサーの評価一覧を取得"""
     try:
         from app.models.evaluation import PersonEvaluation
-        
+
         freelancer = await personnel_controller.get_freelancer_by_id(freelancer_id)
         if not freelancer:
             return Fail(msg="フリーランサーが見つかりません")
@@ -266,18 +265,20 @@ async def get_freelancer_evaluations(
         # 統一評価テーブルから取得
         query = PersonEvaluation.filter(personnel_id=freelancer_id).select_related("case", "contract")
         total = await query.count()
-        evaluations = await query.order_by("-evaluation_date", "-created_at").limit(pageSize).offset((page - 1) * pageSize).all()
-        
+        evaluations = (
+            await query.order_by("-evaluation_date", "-created_at").limit(pageSize).offset((page - 1) * pageSize).all()
+        )
+
         # 評価データを辞書形式に変換
         evaluations_data = []
         for evaluation in evaluations:
             evaluation_dict = await evaluation.to_dict()
-            if hasattr(evaluation, 'case') and evaluation.case:
-                evaluation_dict['case'] = await evaluation.case.to_dict()
-            if hasattr(evaluation, 'contract') and evaluation.contract:
-                evaluation_dict['contract'] = await evaluation.contract.to_dict()
+            if hasattr(evaluation, "case") and evaluation.case:
+                evaluation_dict["case"] = await evaluation.case.to_dict()
+            if hasattr(evaluation, "contract") and evaluation.contract:
+                evaluation_dict["contract"] = await evaluation.contract.to_dict()
             evaluations_data.append(evaluation_dict)
-        
+
         return Success(data=evaluations_data, total=total)
     except Exception as e:
         return Fail(msg=str(e))
@@ -291,20 +292,21 @@ async def create_freelancer_evaluation(
 ):
     """フリーランサー評価を作成"""
     try:
-        from app.models.evaluation import PersonEvaluation
         from tortoise.transactions import in_transaction
-        
+
+        from app.models.evaluation import PersonEvaluation
+
         freelancer = await personnel_controller.get_freelancer_by_id(freelancer_id)
         if not freelancer:
             return Fail(msg="フリーランサーが見つかりません")
 
         evaluation_data = data.model_dump(exclude_none=True) if data else {}
-        evaluation_data['personnel_id'] = freelancer_id
-        evaluation_data['evaluator_id'] = evaluator_id
-        
+        evaluation_data["personnel_id"] = freelancer_id
+        evaluation_data["evaluator_id"] = evaluator_id
+
         async with in_transaction():
             evaluation = await PersonEvaluation.create(**evaluation_data)
-        
+
         result = await evaluation.to_dict()
         return Success(data=result, msg="評価が正常に作成されました")
     except Exception as e:
@@ -316,14 +318,14 @@ async def get_freelancer_evaluation_summary(freelancer_id: int = Query(..., desc
     """フリーランサー評価のサマリーを取得"""
     try:
         from app.models.evaluation import PersonEvaluation
-        
+
         freelancer = await personnel_controller.get_freelancer_by_id(freelancer_id)
         if not freelancer:
             return Fail(msg="フリーランサーが見つかりません")
 
         # 評価サマリー計算
         evaluations = await PersonEvaluation.filter(personnel_id=freelancer_id).all()
-        
+
         if not evaluations:
             summary = {
                 "total_evaluations": 0,
@@ -343,7 +345,7 @@ async def get_freelancer_evaluation_summary(freelancer_id: int = Query(..., desc
                 "average_reliability": round(sum(e.reliability for e in evaluations) / total, 2),
                 "recommendation_rate": round(sum(1 for e in evaluations if e.recommendation) / total * 100, 1),
             }
-        
+
         return Success(data=summary)
     except Exception as e:
         return Fail(msg=str(e))
@@ -364,7 +366,7 @@ async def get_available_freelancers(
     """利用可能なフリーランサーを取得"""
     try:
         from app.models.enums import PersonType
-        
+
         freelancers, total = await personnel_controller.get_available_personnel(
             person_type=PersonType.FREELANCER,
             project_start_date=project_start_date,
@@ -373,7 +375,7 @@ async def get_available_freelancers(
             page=page,
             page_size=pageSize,
         )
-        
+
         data = [await p.to_dict() for p in freelancers]
         return Success(data=data, total=total)
     except Exception as e:
@@ -391,17 +393,17 @@ async def project_matching_search(
         # TODO: 統一Controllerにマッチングロジックを実装する必要があります
         # 現在は基本検索で代用
         from app.models.enums import PersonType
-        
+
         params = matching_params.model_dump(exclude_none=True)
         freelancers, total = await personnel_controller.get_available_personnel(
             person_type=PersonType.FREELANCER,
-            project_start_date=params.get('project_start_date'),
-            required_skills=params.get('required_skills'),
-            min_experience_years=params.get('min_experience_years'),
+            project_start_date=params.get("project_start_date"),
+            required_skills=params.get("required_skills"),
+            min_experience_years=params.get("min_experience_years"),
             page=page,
             page_size=pageSize,
         )
-        
+
         data = [await p.to_dict() for p in freelancers]
         return Success(data=data, total=total)
     except Exception as e:
@@ -412,9 +414,9 @@ async def project_matching_search(
 async def get_freelancer_dashboard(freelancer_id: int = Query(..., description="フリーランサーID")):
     """フリーランサーのダッシュボード統計情報を取得"""
     try:
-        from app.models.personnel import PersonnelSkill
         from app.models.evaluation import PersonEvaluation
-        
+        from app.models.personnel import PersonnelSkill
+
         freelancer = await personnel_controller.get_freelancer_by_id(freelancer_id)
         if not freelancer:
             return Fail(msg="フリーランサーが見つかりません")
@@ -422,11 +424,11 @@ async def get_freelancer_dashboard(freelancer_id: int = Query(..., description="
         # スキル統計
         skills_count = await PersonnelSkill.filter(personnel_id=freelancer_id).count()
         primary_skills_count = await PersonnelSkill.filter(personnel_id=freelancer_id, is_primary_skill=True).count()
-        
-        # 評価統計 
+
+        # 評価統計
         evaluations = await PersonEvaluation.filter(personnel_id=freelancer_id).all()
         total_evaluations = len(evaluations)
-        
+
         evaluation_summary = {
             "total_evaluations": total_evaluations,
             "average_overall_rating": 0,
@@ -435,25 +437,32 @@ async def get_freelancer_dashboard(freelancer_id: int = Query(..., description="
             "average_reliability": 0,
             "recommendation_rate": 0,
         }
-        
+
         if evaluations:
-            evaluation_summary.update({
-                "average_overall_rating": round(sum(e.overall_rating for e in evaluations) / total_evaluations, 2),
-                "average_technical_skill": round(sum(e.technical_skill for e in evaluations) / total_evaluations, 2),
-                "average_communication": round(sum(e.communication for e in evaluations) / total_evaluations, 2),
-                "average_reliability": round(sum(e.reliability for e in evaluations) / total_evaluations, 2),
-                "recommendation_rate": round(sum(1 for e in evaluations if e.recommendation) / total_evaluations * 100, 1),
-            })
-        
+            evaluation_summary.update(
+                {
+                    "average_overall_rating": round(sum(e.overall_rating for e in evaluations) / total_evaluations, 2),
+                    "average_technical_skill": round(
+                        sum(e.technical_skill for e in evaluations) / total_evaluations, 2
+                    ),
+                    "average_communication": round(sum(e.communication for e in evaluations) / total_evaluations, 2),
+                    "average_reliability": round(sum(e.reliability for e in evaluations) / total_evaluations, 2),
+                    "recommendation_rate": round(
+                        sum(1 for e in evaluations if e.recommendation) / total_evaluations * 100, 1
+                    ),
+                }
+            )
+
         # フリーランサー詳細情報取得
         detail = await freelancer.freelancer_detail if freelancer.freelancer_detail else None
         business_years = 0.0
         if detail and detail.business_start_date:
             from datetime import date
+
             today = date.today()
             days = (today - detail.business_start_date).days
             business_years = round(days / 365.25, 1)
-        
+
         dashboard_stats = {
             "basic_info": {
                 "name": freelancer.name,
@@ -473,7 +482,7 @@ async def get_freelancer_dashboard(freelancer_id: int = Query(..., description="
             },
             "evaluation_stats": evaluation_summary,
         }
-        
+
         return Success(data=dashboard_stats)
     except Exception as e:
         return Fail(msg=str(e))
@@ -493,18 +502,18 @@ async def get_freelancer_business_stats(
         # TODO: 統一Controllerに事業統計メソッドを実装する必要があります
         # 現在は基本情報のみ返す
         params = stats_params.model_dump(exclude_none=True) if stats_params else {}
-        
+
         business_stats = {
-            "year": params.get('year'),
-            "month_from": params.get('month_from', 1),
-            "month_to": params.get('month_to', 12),
+            "year": params.get("year"),
+            "month_from": params.get("month_from", 1),
+            "month_to": params.get("month_to", 12),
             "total_projects": 0,  # TODO: Contractモデル統一後に実装
             "total_revenue": 0.0,
             "average_project_value": 0.0,
             "top_skills": [],  # TODO: スキル統計実装
             "client_satisfaction": 0.0,
         }
-        
+
         return Success(data=business_stats)
     except Exception as e:
         return Fail(msg=str(e))
@@ -531,13 +540,13 @@ async def get_top_rated_freelancers(
         # TODO: 統一Controllerに高評価ランキングメソッドを実装する必要があります
         # 現在は有効なフリーランサーを返す
         from app.models.enums import PersonType
-        
+
         freelancers, total = await personnel_controller.get_available_personnel(
             person_type=PersonType.FREELANCER,
             page=1,
             page_size=limit,
         )
-        
+
         data = [await p.to_dict() for p in freelancers]
         return Success(data=data, total=len(freelancers))
     except Exception as e:

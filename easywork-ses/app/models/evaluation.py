@@ -13,11 +13,9 @@ class PersonEvaluation(BaseModel, TimestampMixin):
     # 評価対象の指定（polymorphic reference）
     person_type = fields.CharEnumField(PersonType, description="人材タイプ（bp_employee/freelancer/employee）")
     person_id = fields.BigIntField(description="対象人材ID")
-    
+
     # 案件・契約情報
-    case = fields.ForeignKeyField(
-        "models.Case", related_name="person_evaluations", null=True, description="評価対象案件"
-    )
+    case = fields.ForeignKeyField("models.Case", related_name="person_evaluations", null=True, description="評価対象案件")
     contract = fields.ForeignKeyField(
         "models.Contract", related_name="person_evaluations", null=True, description="評価対象契約"
     )
@@ -65,6 +63,7 @@ class PersonEvaluation(BaseModel, TimestampMixin):
     async def get_person_object(self):
         """評価対象の実際のオブジェクトを取得"""
         from app.models.personnel import Personnel
+
         return await Personnel.get_or_none(id=self.person_id, person_type=self.person_type)
 
     async def get_person_name(self) -> str:

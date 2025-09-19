@@ -8,9 +8,7 @@ from app.models.enums import DecimalProcessingType
 
 class AddClientCompanySchema(BaseModel):
     company_name: Optional[str] = Field(None, description="取り先会社名")
-    company_name_kana: Optional[str] = Field(
-        None, description="取り先会社名（フリーカナ）"
-    )
+    company_name_kana: Optional[str] = Field(None, description="取り先会社名（フリーカナ）")
     representative: Optional[str] = Field(None, description="代表者名")
     capital: Optional[str] = Field(None, description="資本金")
     established_date: Optional[date] = Field(None, description="設立月日")
@@ -20,22 +18,18 @@ class AddClientCompanySchema(BaseModel):
     email: Optional[str] = Field(None, description="メール")
     website: Optional[str] = Field(None, description="Webサイト")
     invoice_number: Optional[str] = Field(None, description="インボイス番号")
-    
+
     # 出勤計算関連
     attendance_calc_type: Optional[int] = Field(15, description="出勤計算区分（分単位）")
-    decimal_processing_type: Optional[DecimalProcessingType] = Field(
-        DecimalProcessingType.ROUND, description="小数処理区分"
-    )
-    
+    decimal_processing_type: Optional[DecimalProcessingType] = Field(DecimalProcessingType.ROUND, description="小数処理区分")
+
     remark: Optional[str] = Field(None, description="備考")
 
 
 class UpdateClientCompanySchema(BaseModel):
     id: Optional[int] = Field(None, description="顧客会社ID")
     company_name: Optional[str] = Field(None, description="取り先会社名")
-    company_name_kana: Optional[str] = Field(
-        None, description="取り先会社名（フリーカナ）"
-    )
+    company_name_kana: Optional[str] = Field(None, description="取り先会社名（フリーカナ）")
     representative: Optional[str] = Field(None, description="代表者名")
     capital: Optional[str] = Field(None, description="資本金")
     established_date: Optional[str] = Field(None, description="設立月日")
@@ -45,12 +39,10 @@ class UpdateClientCompanySchema(BaseModel):
     email: Optional[str] = Field(None, description="メール")
     website: Optional[str] = Field(None, description="Webサイト")
     invoice_number: Optional[str] = Field(None, description="インボイス番号")
-    
+
     # 出勤計算関連
     attendance_calc_type: Optional[int] = Field(None, description="出勤計算区分（分単位）")
-    decimal_processing_type: Optional[DecimalProcessingType] = Field(
-        None, description="小数処理区分"
-    )
+    decimal_processing_type: Optional[DecimalProcessingType] = Field(None, description="小数処理区分")
 
     remark: Optional[str] = Field(None, description="備考")
 
@@ -64,6 +56,7 @@ class AddClientSalesRepresentativeSchema(BaseModel):
     email: str = Field(..., description="メールアドレス")
     is_primary: bool = Field(False, description="主担当者かどうか")
     remark: Optional[str] = Field(None, description="備考")
+
 
 class UpdateClientSalesRepresentativeSchema(BaseModel):
     id: int = Field(..., description="担当者ID")

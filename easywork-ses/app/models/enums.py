@@ -233,6 +233,7 @@ class ContractType(StrEnum):
 
 class ContractChangeType(StrEnum):
     """契約変更種別"""
+
     CONTRACT_RENEWAL = "契約更新"  # 契約更新
     EARLY_TERMINATION = "早期解約"  # 早期解約
     CONDITION_CHANGE = "条件変更"  # 条件変更（単価、時間等）
@@ -246,6 +247,7 @@ class ContractChangeType(StrEnum):
 
 class ContractChangeReason(StrEnum):
     """契約変更理由"""
+
     CLIENT_REQUEST = "クライアント要望"  # クライアント要望
     PERSONNEL_REQUEST = "人材要望"  # 人材要望
     PROJECT_CHANGE = "プロジェクト変更"  # プロジェクト変更
@@ -260,6 +262,7 @@ class ContractChangeReason(StrEnum):
 
 class ContractItemType(StrEnum):
     """契約項目種別"""
+
     BASIC_SALARY = "基本給"  # 基本給
     OVERTIME_FEE = "残業代"  # 残業代
     ABSENCE_DEDUCTION = "欠勤控除"  # 欠勤控除
@@ -273,6 +276,7 @@ class ContractItemType(StrEnum):
 
 class PaymentUnit(StrEnum):
     """支払い単位"""
+
     YEN_PER_MONTH = "円/月"  # 円/月
     YEN_PER_HOUR = "円/時間"  # 円/時間
     YEN_PER_DAY = "円/日"  # 円/日
@@ -280,8 +284,6 @@ class PaymentUnit(StrEnum):
     TEN_THOUSAND_YEN_PER_MONTH = "万円/月"  # 万円/月
     PERCENTAGE = "％"  # パーセンテージ
     FIXED_AMOUNT = "固定額"  # 固定額
-
-
 
 
 class AttendanceType(StrEnum):
@@ -292,9 +294,6 @@ class AttendanceType(StrEnum):
     ABSENCE = "欠勤"  # 欠勤
     HOLIDAY_WORK = "休日出勤"  # 休日出勤
     COMPENSATORY_LEAVE = "振休"  # 振休
-
-
-
 
 
 # 追加のEnum定義
@@ -330,9 +329,11 @@ class PersonType(StrEnum):
     BP_EMPLOYEE = "bp_employee"  # BP社員
     FREELANCER = "freelancer"  # フリーランス
     EMPLOYEE = "employee"  # 自社社員
+
     @classmethod
     def get_label(cls, value: str) -> str:
         return _PERSON_TYPE_LABELS.get(value, value)
+
 
 _PERSON_TYPE_LABELS = {
     PersonType.BP_EMPLOYEE: "BP社員",
@@ -350,8 +351,10 @@ class ChangeType(StrEnum):
     CANDIDATE_REMOVE = "candidate_remove"  # 候補者削除
     CANDIDATE_UPDATE = "candidate_update"  # 候補者更新
 
+
 class ApproveStatus(StrEnum):
     """审批状态枚举"""
+
     DRAFT = "draft"  # 草稿状态（未提交）
     PENDING = "pending"  # 等待审批
     APPROVED = "approved"  # 已批准
@@ -361,20 +364,31 @@ class ApproveStatus(StrEnum):
 
 class OrderStatus(StrEnum):
     """注文書状态枚举"""
+
     DRAFT = "draft"  # 草稿状态
     GENERATED = "generated"  # 已生成注文书
     SENT = "sent"  # 已发送邮件
     COLLECTED = "collected"  # 已回收
 
 
+class RequestStatus(StrEnum):
+    """請求書状态枚举"""
+
+    DRAFT = "draft"  # 草稿状态
+    GENERATED = "generated"  # 已生成请求书
+    SENT = "sent"  # 已发送
+    PAID = "paid"  # 已支付
+
+
 class WeeklyMoodStatus(StrEnum):
     """週間心情状态枚举"""
+
     EXCELLENT = "excellent"  # 😄 优秀/非常好
-    GOOD = "good"           # 😊 良好
-    NORMAL = "normal"       # 😐 一般
-    STRESSED = "stressed"   # 😰 有压力
-    TIRED = "tired"         # 😴 疲劳
-    DIFFICULT = "difficult" # 😞 困难/不好
+    GOOD = "good"  # 😊 良好
+    NORMAL = "normal"  # 😐 一般
+    STRESSED = "stressed"  # 😰 有压力
+    TIRED = "tired"  # 😴 疲劳
+    DIFFICULT = "difficult"  # 😞 困难/不好
 
 
 # MonthlySubmissionStatus 已合并到 ApproveStatus，不再单独定义
@@ -382,6 +396,7 @@ class WeeklyMoodStatus(StrEnum):
 
 class BPContractStatus(StrEnum):
     """BP会社契約ステータス"""
+
     DRAFT = "草案"  # 草案
     ACTIVE = "有効"  # 有効
     SUSPENDED = "一時停止"  # 一時停止
@@ -391,6 +406,7 @@ class BPContractStatus(StrEnum):
 
 class SESContractForm(StrEnum):
     """SES契約形態"""
+
     GYOMU_ITAKU = "業務委託"  # 業務委託
     HAN_ITAKU = "半委託"  # 半委託
     HAKEN = "派遣"  # 派遣
@@ -400,12 +416,14 @@ class SESContractForm(StrEnum):
 
 class ContractCompanyType(StrEnum):
     """契約会社種別"""
+
     CLIENT_COMPANY = "取引会社"  # 取引会社
     COMPANY_INFO = "会社情報"  # 会社情報
 
 
 class BusinessClassification(StrEnum):
     """事業分類"""
+
     FINANCE_BANK = "金融（銀行）"  # 金融（銀行）
     FINANCE_INSURANCE = "金融（保険）"  # 金融（保険）
     FINANCE_SECURITIES = "金融（証券）"  # 金融（証券）
@@ -416,8 +434,9 @@ class BusinessClassification(StrEnum):
 
 class WorkRoleClassification(StrEnum):
     """作業区分（職責）"""
+
     OP = "オペレーター"  # オペレーター
-    PG = "プログラマー"  # プログラマー  
+    PG = "プログラマー"  # プログラマー
     SP = "システムプログラマー"  # システムプログラマー
     SE = "システムエンジニア"  # システムエンジニア
     SL = "サブリーダー"  # サブリーダー
@@ -427,6 +446,7 @@ class WorkRoleClassification(StrEnum):
 
 class TimeCalculationType(StrEnum):
     """時間計算種類"""
+
     FIXED_160 = "固定160時間"  # 毎月固定160時間で計算（実働時間に関係なく固定）
     BUSINESS_DAYS_8 = "営業日数×8"  # 営業日数×8時間で月間工時計算
     BUSINESS_DAYS_7_9 = "営業日数×7.9"  # 営業日数×7.9時間で月間工時計算（休憩時間調整）
@@ -435,4 +455,3 @@ class TimeCalculationType(StrEnum):
     HOURLY_RATE = "時給"  # 実働時間×時給での純粋時給制
     CUSTOM_CALCULATION = "自定義計算"  # プロジェクト固有の計算方式
     OTHER = "その他"  # 上記以外の特殊な計算方式
-

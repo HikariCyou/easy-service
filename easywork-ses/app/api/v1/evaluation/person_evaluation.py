@@ -1,22 +1,22 @@
 from datetime import date
-from typing import Optional, List
+from typing import List, Optional
 
 from fastapi import APIRouter, Query
 
 from app.controllers.person_evaluation import person_evaluation_controller
+from app.models.enums import PersonType
+from app.schemas import Fail, Success
 from app.schemas.person_evaluation import (
     CreatePersonEvaluationSchema,
-    UpdatePersonEvaluationSchema,
     PersonEvaluationDetailSchema,
+    PersonEvaluationListResponse,
     PersonEvaluationListSchema,
-    PersonEvaluationSummarySchema,
     PersonEvaluationSearchSchema,
     PersonEvaluationStatsSchema,
+    PersonEvaluationSummarySchema,
     PersonTopRatedSchema,
-    PersonEvaluationListResponse,
+    UpdatePersonEvaluationSchema,
 )
-from app.models.enums import PersonType
-from app.schemas import Success, Fail
 
 router = APIRouter()
 
@@ -27,12 +27,8 @@ async def create_evaluation(
 ):
     """人材評価を作成する"""
     try:
-        evaluation = await person_evaluation_controller.create_evaluation(
-            evaluation_data=evaluation_data
-        )
-        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(
-            evaluation, include_relations=True
-        )
+        evaluation = await person_evaluation_controller.create_evaluation(evaluation_data=evaluation_data)
+        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=evaluation_dict, msg="評価作成が完了しました")
     except ValueError as e:
         return Fail(code=400, msg=str(e))
@@ -64,9 +60,7 @@ async def list_evaluations(
             page=page, page_size=page_size, search_params=search_params
         )
 
-        evaluations_dict = await person_evaluation_controller.evaluations_to_dict(
-            evaluations, include_relations=True
-        )
+        evaluations_dict = await person_evaluation_controller.evaluations_to_dict(evaluations, include_relations=True)
 
         return Success(
             data=evaluations_dict,
@@ -83,15 +77,11 @@ async def get_evaluation(
 ):
     """指定IDの人材評価詳細を取得する"""
     try:
-        evaluation = await person_evaluation_controller.get_evaluation_by_id(
-            evaluation_id, include_relations=True
-        )
+        evaluation = await person_evaluation_controller.get_evaluation_by_id(evaluation_id, include_relations=True)
         if not evaluation:
             return Fail(code=404, msg="指定された評価が見つかりません")
 
-        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(
-            evaluation, include_relations=True
-        )
+        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=evaluation_dict, msg="評価詳細取得が完了しました")
     except Exception as e:
         return Fail(code=500, msg=f"評価詳細取得中にエラーが発生しました: {str(e)}")
@@ -109,15 +99,11 @@ async def update_evaluation(
         if not update_data:
             return Fail(code=400, msg="更新するデータがありません")
 
-        evaluation = await person_evaluation_controller.update_evaluation(
-            evaluation_id, update_data
-        )
+        evaluation = await person_evaluation_controller.update_evaluation(evaluation_id, update_data)
         if not evaluation:
             return Fail(code=404, msg="指定された評価が見つかりません")
 
-        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(
-            evaluation, include_relations=True
-        )
+        evaluation_dict = await person_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=evaluation_dict, msg="評価更新が完了しました")
     except ValueError as e:
         return Fail(code=400, msg=str(e))
@@ -153,9 +139,7 @@ async def get_person_evaluations(
             person_type, person_id, page, page_size
         )
 
-        evaluations_dict = await person_evaluation_controller.evaluations_to_dict(
-            evaluations, include_relations=True
-        )
+        evaluations_dict = await person_evaluation_controller.evaluations_to_dict(evaluations, include_relations=True)
 
         return Success(
             data={
@@ -189,9 +173,7 @@ async def create_person_evaluation(
             person_type, person_id, evaluation_dict, evaluator_id
         )
 
-        evaluation_result = await person_evaluation_controller.evaluation_to_dict(
-            evaluation, include_relations=True
-        )
+        evaluation_result = await person_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=evaluation_result, msg="人材評価作成が完了しました")
     except ValueError as e:
         return Fail(code=400, msg=str(e))
@@ -206,9 +188,7 @@ async def get_person_evaluation_summary(
 ):
     """特定人材の評価サマリーを取得する"""
     try:
-        summary = await person_evaluation_controller.get_person_evaluation_summary(
-            person_type, person_id
-        )
+        summary = await person_evaluation_controller.get_person_evaluation_summary(person_type, person_id)
         return Success(data=summary, msg="評価サマリー取得が完了しました")
     except Exception as e:
         return Fail(code=500, msg=f"評価サマリー取得中にエラーが発生しました: {str(e)}")
@@ -222,9 +202,7 @@ async def get_top_rated_persons(
 ):
     """高評価人材一覧を取得する"""
     try:
-        top_persons = await person_evaluation_controller.get_top_rated_persons(
-            person_type, limit, min_evaluations
-        )
+        top_persons = await person_evaluation_controller.get_top_rated_persons(person_type, limit, min_evaluations)
         return Success(data=top_persons, msg="高評価人材一覧取得が完了しました")
     except Exception as e:
         return Fail(code=500, msg=f"高評価人材取得中にエラーが発生しました: {str(e)}")
@@ -241,17 +219,14 @@ async def get_evaluation_stats_by_period(
         if start_date > end_date:
             return Fail(code=400, msg="開始日は終了日より前である必要があります")
 
-        stats = await person_evaluation_controller.get_evaluation_stats_by_period(
-            start_date, end_date, person_type
-        )
+        stats = await person_evaluation_controller.get_evaluation_stats_by_period(start_date, end_date, person_type)
         return Success(data=stats, msg="期間別評価統計取得が完了しました")
     except Exception as e:
         return Fail(code=500, msg=f"期間別評価統計取得中にエラーが発生しました: {str(e)}")
 
 
 @router.get("/dashboard/overview", summary="評価ダッシュボード概要")
-async def get_evaluation_dashboard(
-):
+async def get_evaluation_dashboard():
     """評価ダッシュボード概要を取得する"""
     try:
         from datetime import datetime, timedelta
@@ -260,14 +235,10 @@ async def get_evaluation_dashboard(
         end_date = date.today()
         start_date = end_date - timedelta(days=30)
 
-        recent_stats = await person_evaluation_controller.get_evaluation_stats_by_period(
-            start_date, end_date
-        )
+        recent_stats = await person_evaluation_controller.get_evaluation_stats_by_period(start_date, end_date)
 
         # 高評価人材トップ5
-        top_persons = await person_evaluation_controller.get_top_rated_persons(
-            limit=5, min_evaluations=1
-        )
+        top_persons = await person_evaluation_controller.get_top_rated_persons(limit=5, min_evaluations=1)
 
         dashboard_data = {
             "recent_stats": recent_stats,
@@ -288,9 +259,7 @@ async def get_bp_employee_evaluations(
     page_size: int = Query(10, ge=1, le=100),
 ):
     """BP社員の評価一覧を取得する"""
-    return await get_person_evaluations(
-        PersonType.BP_EMPLOYEE, bp_employee_id, page, page_size
-    )
+    return await get_person_evaluations(PersonType.BP_EMPLOYEE, bp_employee_id, page, page_size)
 
 
 @router.get("/freelancer/{freelancer_id}/evaluations", summary="フリーランスの評価一覧")
@@ -300,9 +269,7 @@ async def get_freelancer_evaluations(
     page_size: int = Query(10, ge=1, le=100),
 ):
     """フリーランスの評価一覧を取得する"""
-    return await get_person_evaluations(
-        PersonType.FREELANCER, freelancer_id, page, page_size
-    )
+    return await get_person_evaluations(PersonType.FREELANCER, freelancer_id, page, page_size)
 
 
 @router.get("/employee/{employee_id}/evaluations", summary="自社社員の評価一覧")
@@ -312,6 +279,4 @@ async def get_employee_evaluations(
     page_size: int = Query(10, ge=1, le=100),
 ):
     """自社社員の評価一覧を取得する"""
-    return await get_person_evaluations(
-        PersonType.EMPLOYEE, employee_id, page, page_size
-    )
+    return await get_person_evaluations(PersonType.EMPLOYEE, employee_id, page, page_size)

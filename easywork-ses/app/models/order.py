@@ -1,48 +1,49 @@
 from datetime import datetime
+
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import OrderStatus, ApproveStatus, ContractItemType
+from app.models.enums import ApproveStatus, ContractItemType, OrderStatus
 
 
 class Order(BaseModel, TimestampMixin):
     """
     注文書管理 - SES業務における月次注文書管理
-    
+
     注文書は自社からBP会社に対して月度で発行する業務委託の注文書
-    
+
     データの取得元：
     - BP会社: personnel.bp_employee_detail.bp_company
-    - 要员名称: personnel.name  
+    - 要员名称: personnel.name
     - 案件名称: case.title
     - 契約詳細: contract (契約期間、工時、単価等)
     - 担当営業: case.company_sales_representative (自社営業)
     - 基本給: contract.calculation_items (BASIC_SALARY)
     """
-    
+
     # 基本情報
     order_number = fields.CharField(max_length=50, unique=True, description="注文番号")
     year_month = fields.CharField(max_length=7, description="対象年月（YYYY-MM）")
-    
+
     # 関連エンティティ（これらから必要な情報を全て取得）
     personnel = fields.ForeignKeyField("models.Personnel", related_name="orders", description="対象要員")
     case = fields.ForeignKeyField("models.Case", related_name="orders", description="案件")
     contract = fields.ForeignKeyField("models.Contract", related_name="orders", description="契約")
-    
+
     # 文書管理
     order_document_url = fields.CharField(max_length=500, null=True, description="注文書PDF URL")
     order_request_url = fields.CharField(max_length=500, null=True, description="注文請書PDF URL")
-    
+
     # ステータス管理
     status = fields.CharEnumField(OrderStatus, default=OrderStatus.DRAFT, description="ステータス")
-    
+
     # 回収管理
     collected_date = fields.DatetimeField(null=True, description="回収日時")
-    
+
     # 送信管理
     sent_date = fields.DatetimeField(null=True, description="送信日時")
     sent_by = fields.CharField(max_length=100, null=True, description="送信者")
-    
+
     # 备考
     remark = fields.TextField(null=True, description="備考")
 
@@ -62,12 +63,12 @@ class Order(BaseModel, TimestampMixin):
     def is_sent(self) -> bool:
         """送信済みかどうか"""
         return self.status in [OrderStatus.SENT, OrderStatus.COLLECTED]
-    
+
     @property
     def is_collected(self) -> bool:
         """回収済みかどうか"""
         return self.status == OrderStatus.COLLECTED
-    
+
     def get_year_month_display(self) -> str:
         """年月表示用（2024年1月形式）"""
         if not self.year_month:
@@ -83,7 +84,7 @@ class Order(BaseModel, TimestampMixin):
         self.sent_by = sent_by
         self.status = OrderStatus.SENT
         await self.save()
-    
+
     async def mark_as_collected(self):
         """回収完了マーク"""
         self.collected_date = datetime.now()
@@ -92,30 +93,29 @@ class Order(BaseModel, TimestampMixin):
 
     async def get_bp_company(self):
         """BP会社取得"""
-        await self.fetch_related('personnel__bp_employee_detail__bp_company')
+        await self.fetch_related("personnel__bp_employee_detail__bp_company")
         personnel = self.personnel
-        if personnel and hasattr(personnel, 'bp_employee_detail') and personnel.bp_employee_detail:
+        if personnel and hasattr(personnel, "bp_employee_detail") and personnel.bp_employee_detail:
             return await personnel.bp_employee_detail.bp_company
         return None
 
     async def get_sales_representative(self):
         """担当営業取得"""
-        await self.fetch_related('case__company_sales_representative')
+        await self.fetch_related("case__company_sales_representative")
         case = self.case
         return case.company_sales_representative if case else None
 
     async def get_basic_salary(self) -> float:
         """基本給取得"""
-        await self.fetch_related('contract__calculation_items')
+        await self.fetch_related("contract__calculation_items")
         contract = self.contract
         if not contract:
             return 0.0
-            
+
         basic_salary_item = await contract.calculation_items.filter(
-            item_type=ContractItemType.BASIC_SALARY.value, 
-            is_active=True
+            item_type=ContractItemType.BASIC_SALARY.value, is_active=True
         ).first()
-        
+
         return float(basic_salary_item.amount) if basic_salary_item else 0.0
 
     async def get_full_details(self) -> dict:
@@ -124,31 +124,29 @@ class Order(BaseModel, TimestampMixin):
         """
         # 関連データを効率的に取得
         await self.fetch_related(
-            'personnel__bp_employee_detail__bp_company',
-            'case__company_sales_representative', 
-            'contract__calculation_items'
+            "personnel__bp_employee_detail__bp_company",
+            "case__company_sales_representative",
+            "contract__calculation_items",
         )
-        
+
         personnel = self.personnel
         case = self.case
         contract = self.contract
         bp_company = await self.get_bp_company()
         sales_rep = await self.get_sales_representative()
         basic_salary = await self.get_basic_salary()
-        
+
         return {
             # 基本情報
             "order_number": self.order_number,
             "year_month": self.year_month,
             "year_month_display": self.get_year_month_display(),
-            
             # 関連情報
             "bp_company_name": bp_company.name if bp_company else "",
             "bp_company_id": bp_company.id,
             "personnel_name": personnel.name if personnel else "",
             "case_title": case.title if case else "",
             "sales_representative_name": sales_rep.name if sales_rep else "",
-            
             # 契約詳細
             "contract_details": {
                 "contract_number": contract.contract_number if contract else "",
@@ -159,18 +157,15 @@ class Order(BaseModel, TimestampMixin):
                 "min_working_hours": contract.min_working_hours if contract else None,
                 "max_working_hours": contract.max_working_hours if contract else None,
             },
-            
             # ステータス情報
             "status": self.status,
             "is_sent": self.is_sent,
             "is_collected": self.is_collected,
             "sent_date": self.sent_date,
             "collected_date": self.collected_date,
-            
             # 文書情報
             "order_document_url": self.order_document_url,
             "order_request_url": self.order_request_url,
-            
             # その他
             "remark": self.remark,
         }
@@ -182,35 +177,35 @@ class Order(BaseModel, TimestampMixin):
 class OrderBatch(BaseModel, TimestampMixin):
     """
     注文書一括処理管理
-    
+
     月度注文書的一括生成・送信管理
     - 全体一括
-    - BP会社別一括  
+    - BP会社別一括
     - 営業担当別一括
     """
-    
+
     # 基本情報
     batch_number = fields.CharField(max_length=50, unique=True, description="バッチ番号")
     year_month = fields.CharField(max_length=7, description="対象年月")
     batch_type = fields.CharField(max_length=50, description="バッチタイプ")  # "all", "by_bp_company", "by_sales_rep"
-    
+
     # フィルター条件（タイプに応じて使用）
     filter_bp_company_id = fields.BigIntField(null=True, description="対象BP会社ID")
     filter_sales_rep_id = fields.BigIntField(null=True, description="担当営業ID")
-    
+
     # 処理状況
     status = fields.CharEnumField(ApproveStatus, default=ApproveStatus.DRAFT, description="バッチステータス")
     total_orders = fields.IntField(default=0, description="総注文書数")
     sent_orders = fields.IntField(default=0, description="送信済み数")
-    
+
     # 処理者情報
     created_by = fields.CharField(max_length=100, description="作成者")
     processed_date = fields.DatetimeField(null=True, description="処理日時")
     processed_by = fields.CharField(max_length=100, null=True, description="処理者")
-    
+
     # 備考
     remark = fields.TextField(null=True, description="備考")
-    
+
     # 関連注文書
     orders = fields.ManyToManyField("models.Order", related_name="batches", description="関連注文書")
 

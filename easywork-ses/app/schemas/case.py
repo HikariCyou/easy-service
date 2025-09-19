@@ -1,13 +1,15 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
-from app.models.enums import ContractCompanyType, BusinessClassification
+
+from app.models.enums import BusinessClassification, ContractCompanyType
 
 
 class CaseTerminationSchema(BaseModel):
     """案件終了リクエスト"""
+
     case_id: int = Field(..., description="案件ID")
     termination_date: Optional[date] = Field(None, description="終了日（未指定の場合は今日）")
     reason: Optional[str] = Field("案件終了", description="終了理由")
@@ -90,29 +92,29 @@ class UpdateCaseCandidateSchema(BaseModel):
 
 class CaseHistorySchema(BaseModel):
     """案件変更履歴Schema"""
-    
+
     id: int = Field(..., description="履歴ID")
     case_id: int = Field(..., description="案件ID")
     change_type: str = Field(..., description="変更タイプ")
-    
+
     # 変更者情報
     changed_by: int = Field(..., description="変更者ユーザーID")
     changed_by_name: Optional[str] = Field(None, description="変更者名")
-    
+
     # 変更内容
     field_name: Optional[str] = Field(None, description="変更フィールド名")
     old_value: Optional[str] = Field(None, description="変更前の値")
     new_value: Optional[str] = Field(None, description="変更後の値")
-    
+
     # 変更詳細
     change_details: Optional[Dict[str, Any]] = Field(None, description="変更詳細（JSON）")
-    
+
     # 変更理由・コメント
     comment: Optional[str] = Field(None, description="変更理由・コメント")
-    
+
     # IP アドレス
     ip_address: Optional[str] = Field(None, description="変更者IPアドレス")
-    
+
     # タイムスタンプ
     created_at: datetime = Field(..., description="作成日時")
     updated_at: datetime = Field(..., description="更新日時")
@@ -120,7 +122,7 @@ class CaseHistorySchema(BaseModel):
 
 class CreateCaseHistorySchema(BaseModel):
     """案件変更履歴作成Schema"""
-    
+
     case_id: int = Field(..., description="案件ID")
     change_type: str = Field(..., description="変更タイプ")
     changed_by: int = Field(..., description="変更者ユーザーID")
@@ -135,7 +137,7 @@ class CreateCaseHistorySchema(BaseModel):
 
 class CaseHistorySearchSchema(BaseModel):
     """案件変更履歴検索Schema"""
-    
+
     case_id: Optional[int] = Field(None, description="案件ID")
     change_type: Optional[str] = Field(None, description="変更タイプ")
     changed_by: Optional[int] = Field(None, description="変更者ユーザーID")
@@ -146,7 +148,7 @@ class CaseHistorySearchSchema(BaseModel):
 
 class CaseHistoryStatsSchema(BaseModel):
     """案件変更履歴統計Schema"""
-    
+
     total_changes: int = Field(..., description="総変更数")
     change_type_counts: Dict[str, int] = Field(..., description="変更タイプ別件数")
     most_changed_cases: List[Dict[str, Any]] = Field(..., description="変更回数の多い案件Top10")

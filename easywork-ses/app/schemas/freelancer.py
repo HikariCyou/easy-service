@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class CreateFreelancerSchema(BaseModel):
     """フリーランサー作成schema"""
+
     user_id: Optional[int] = Field(None, description="ユーザーID")
     # 基本情報
     name: str = Field(..., description="氏名", example="田中太郎")
@@ -77,6 +78,7 @@ class CreateFreelancerSchema(BaseModel):
 
 class UpdateFreelancerSchema(BaseModel):
     """フリーランサー更新schema"""
+
     user_id: Optional[int] = Field(None, description="ユーザーID")
 
     # 基本情報
@@ -148,7 +150,7 @@ class UpdateFreelancerSchema(BaseModel):
 
 class FreelancerSearchSchema(BaseModel):
     """フリーランサー検索schema"""
-    
+
     name: Optional[str] = Field(None, description="氏名で検索", example="田中")
     code: Optional[str] = Field(None, description="フリーランサーコードで検索", example="FL")
     employment_status: Optional[str] = Field(None, description="稼働ステータスで検索", example="available")
@@ -165,6 +167,7 @@ class FreelancerSearchSchema(BaseModel):
 
 class CreateFreelancerSkillSchema(BaseModel):
     """フリーランサー技能作成schema"""
+
     freelancer_id: int = Field(..., description="フリーランサーID", example=1)
     skill_name: str = Field(..., description="スキル名称", example="Python")
     category: Optional[str] = Field(None, description="スキル分類", example="プログラミング言語")
@@ -214,7 +217,7 @@ class BatchUpdateFreelancerSkillsSchema(BaseModel):
 
 class CreateFreelancerEvaluationSchema(BaseModel):
     """フリーランサー評価作成schema"""
-    
+
     case_id: Optional[int] = Field(None, description="評価対象案件ID", example=1)
     contract_id: Optional[int] = Field(None, description="評価対象契約ID", example=1)
     technical_skill: int = Field(..., description="技術力 (1-5)", example=5, ge=1, le=5)
@@ -233,7 +236,7 @@ class CreateFreelancerEvaluationSchema(BaseModel):
 
 class FreelancerProjectMatchingSchema(BaseModel):
     """フリーランサー案件マッチング検索schema"""
-    
+
     required_skills: List[str] = Field(..., description="必要スキルリスト", example=["Python", "React"])
     project_start_date: Optional[date] = Field(None, description="案件開始日", example="2024-03-01")
     project_end_date: Optional[date] = Field(None, description="案件終了日", example="2024-12-31")
@@ -247,7 +250,7 @@ class FreelancerProjectMatchingSchema(BaseModel):
 
 class FreelancerBusinessStatsSchema(BaseModel):
     """フリーランサー事業統計schema"""
-    
+
     year: Optional[int] = Field(None, description="統計年度", example=2024)
     month_from: Optional[int] = Field(None, description="開始月", example=1, ge=1, le=12)
     month_to: Optional[int] = Field(None, description="終了月", example=12, ge=1, le=12)

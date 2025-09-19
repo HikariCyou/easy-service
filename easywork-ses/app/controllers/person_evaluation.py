@@ -1,13 +1,13 @@
-from typing import List, Dict, Any, Optional, Tuple
 from datetime import date
+from typing import Any, Dict, List, Optional, Tuple
 
 from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
-from app.models.evaluation import PersonEvaluation
-from app.models.enums import PersonType
 from app.models.case import Case
 from app.models.contract import Contract
+from app.models.enums import PersonType
+from app.models.evaluation import PersonEvaluation
 from app.utils.common import clean_dict
 
 
@@ -52,23 +52,19 @@ class PersonEvaluationController:
             query = query.prefetch_related("case", "contract")
         return await query.first()
 
-    async def create_evaluation(
-        self, evaluation_data
-    ) -> PersonEvaluation:
+    async def create_evaluation(self, evaluation_data) -> PersonEvaluation:
         """評価作成"""
         async with in_transaction():
             # Pydanticスキーマを辞書に変換
-            if hasattr(evaluation_data, 'model_dump'):
+            if hasattr(evaluation_data, "model_dump"):
                 data_dict = evaluation_data.model_dump(exclude_unset=True)
-            elif hasattr(evaluation_data, 'dict'):
+            elif hasattr(evaluation_data, "dict"):
                 data_dict = evaluation_data.dict()
             else:
                 data_dict = evaluation_data
-                
+
             # 人材存在確認
-            person = await self._get_person_by_type_and_id(
-                data_dict.get("person_type"), data_dict.get("person_id")
-            )
+            person = await self._get_person_by_type_and_id(data_dict.get("person_type"), data_dict.get("person_id"))
             if not person:
                 raise ValueError("指定された要員が見つかりません")
 
@@ -135,9 +131,9 @@ class PersonEvaluationController:
         page_size: int = 10,
     ) -> Tuple[List[PersonEvaluation], int]:
         """特定人材の評価一覧取得"""
-        query = PersonEvaluation.filter(
-            person_type=person_type, person_id=person_id
-        ).prefetch_related("case", "contract")
+        query = PersonEvaluation.filter(person_type=person_type, person_id=person_id).prefetch_related(
+            "case", "contract"
+        )
 
         total = await query.count()
         evaluations = (
@@ -161,13 +157,9 @@ class PersonEvaluationController:
         evaluation_data["person_id"] = person_id
         return await self.create_evaluation(evaluation_data, evaluator_id)
 
-    async def get_person_evaluation_summary(
-        self, person_type: PersonType, person_id: int
-    ) -> Dict[str, Any]:
+    async def get_person_evaluation_summary(self, person_type: PersonType, person_id: int) -> Dict[str, Any]:
         """特定人材の評価サマリー取得"""
-        evaluations = await PersonEvaluation.filter(
-            person_type=person_type, person_id=person_id
-        ).all()
+        evaluations = await PersonEvaluation.filter(person_type=person_type, person_id=person_id).all()
 
         if not evaluations:
             return {
@@ -186,40 +178,31 @@ class PersonEvaluationController:
             }
 
         total = len(evaluations)
-        
+
         # 拡張フィールドを持つ評価のみで計算
         extended_evaluations = [e for e in evaluations if e.has_extended_fields()]
-        
+
         return {
             "person_type": person_type.value,
             "person_id": person_id,
             "total_evaluations": total,
-            "average_overall_rating": round(
-                sum(e.overall_rating for e in evaluations) / total, 2
-            ),
-            "average_technical_skill": round(
-                sum(e.technical_skill for e in evaluations) / total, 2
-            ),
-            "average_communication": round(
-                sum(e.communication for e in evaluations) / total, 2
-            ),
-            "average_reliability": round(
-                sum(e.reliability for e in evaluations) / total, 2
-            ),
-            "average_proactiveness": round(
-                sum(e.proactiveness for e in evaluations) / total, 2
-            ),
+            "average_overall_rating": round(sum(e.overall_rating for e in evaluations) / total, 2),
+            "average_technical_skill": round(sum(e.technical_skill for e in evaluations) / total, 2),
+            "average_communication": round(sum(e.communication for e in evaluations) / total, 2),
+            "average_reliability": round(sum(e.reliability for e in evaluations) / total, 2),
+            "average_proactiveness": round(sum(e.proactiveness for e in evaluations) / total, 2),
             "average_independence": round(
-                sum(e.independence for e in extended_evaluations if e.independence) 
-                / len(extended_evaluations), 2
-            ) if extended_evaluations and any(e.independence for e in extended_evaluations) else 0.0,
+                sum(e.independence for e in extended_evaluations if e.independence) / len(extended_evaluations), 2
+            )
+            if extended_evaluations and any(e.independence for e in extended_evaluations)
+            else 0.0,
             "average_delivery_quality": round(
-                sum(e.delivery_quality for e in extended_evaluations if e.delivery_quality) 
-                / len(extended_evaluations), 2
-            ) if extended_evaluations and any(e.delivery_quality for e in extended_evaluations) else 0.0,
-            "recommendation_rate": round(
-                sum(1 for e in evaluations if e.recommendation) / total * 100, 1
-            ),
+                sum(e.delivery_quality for e in extended_evaluations if e.delivery_quality) / len(extended_evaluations),
+                2,
+            )
+            if extended_evaluations and any(e.delivery_quality for e in extended_evaluations)
+            else 0.0,
+            "recommendation_rate": round(sum(1 for e in evaluations if e.recommendation) / total * 100, 1),
             "latest_evaluation_date": max(e.evaluation_date for e in evaluations) if evaluations else None,
         }
 
@@ -255,27 +238,27 @@ class PersonEvaluationController:
             evaluations = stats["evaluations"]
             if len(evaluations) >= min_evaluations:
                 avg_rating = sum(e.overall_rating for e in evaluations) / len(evaluations)
-                recommendation_rate = (
-                    sum(1 for e in evaluations if e.recommendation) / len(evaluations) * 100
-                )
-                
+                recommendation_rate = sum(1 for e in evaluations if e.recommendation) / len(evaluations) * 100
+
                 # 人材名を取得
                 person = await self._get_person_by_type_and_id(person_type, person_id)
                 person_name = person.name if person else f"Unknown-{person_id}"
 
-                top_persons.append({
-                    "person_type": person_type,
-                    "person_id": person_id,
-                    "person_name": person_name,
-                    "average_rating": round(avg_rating, 2),
-                    "total_evaluations": len(evaluations),
-                    "recommendation_rate": round(recommendation_rate, 1),
-                    "latest_evaluation_date": max(e.evaluation_date for e in evaluations),
-                })
+                top_persons.append(
+                    {
+                        "person_type": person_type,
+                        "person_id": person_id,
+                        "person_name": person_name,
+                        "average_rating": round(avg_rating, 2),
+                        "total_evaluations": len(evaluations),
+                        "recommendation_rate": round(recommendation_rate, 1),
+                        "latest_evaluation_date": max(e.evaluation_date for e in evaluations),
+                    }
+                )
 
         # 評価順でソート
         top_persons.sort(key=lambda x: (x["average_rating"], x["total_evaluations"]), reverse=True)
-        
+
         return top_persons[:limit]
 
     async def get_evaluation_stats_by_period(
@@ -335,9 +318,7 @@ class PersonEvaluationController:
 
             if include_relations:
                 # 人材名を取得
-                person = await self._get_person_by_type_and_id(
-                    evaluation.person_type, evaluation.person_id
-                )
+                person = await self._get_person_by_type_and_id(evaluation.person_type, evaluation.person_id)
                 if person:
                     evaluation_dict["person_name"] = person.name
 
@@ -365,6 +346,7 @@ class PersonEvaluationController:
     async def _get_person_by_type_and_id(self, person_type: PersonType, person_id: int):
         """人材タイプとIDから人材オブジェクトを取得"""
         from app.models.personnel import Personnel
+
         return await Personnel.get_or_none(id=person_id, person_type=person_type)
 
     def _build_search_query(self, search_params: Dict) -> Q:

@@ -1,17 +1,18 @@
-from typing import Optional, List
 from datetime import date
-from fastapi import APIRouter, Query, Body
+from typing import List, Optional
+
+from fastapi import APIRouter, Body, Query
 
 from app.controllers.employee_evaluation import employee_evaluation_controller
 from app.controllers.personnel_unified import personnel_controller
-from app.schemas import Success, Fail
+from app.schemas import Fail, Success
 from app.schemas.employee_evaluation import (
     CreateEmployeeEvaluationSchema,
-    UpdateEmployeeEvaluationSchema,
-    EmployeeEvaluationListSchema,
     EmployeeEvaluationDetailSchema,
+    EmployeeEvaluationListSchema,
+    EmployeeEvaluationSearchSchema,
     EmployeeEvaluationSummarySchema,
-    EmployeeEvaluationSearchSchema
+    UpdateEmployeeEvaluationSchema,
 )
 
 router = APIRouter()
@@ -34,7 +35,7 @@ async def get_evaluation_list(
 ):
     """
     社員評価一覧を取得
-    
+
     対応する絞り込み条件：
     - 社員ID、案件ID、契約ID、評価者ID
     - 総合評価の範囲
@@ -65,7 +66,7 @@ async def get_evaluation_list(
         evaluations, total = await employee_evaluation_controller.list_evaluations(
             page=page, page_size=page_size, search_params=search_params
         )
-        
+
         data = await employee_evaluation_controller.evaluations_to_dict(evaluations, include_relations=True)
         return Success(data=data, total=total)
     except Exception as e:
@@ -81,11 +82,9 @@ async def search_evaluations(
     """社員評価の高度検索"""
     try:
         evaluations, total = await employee_evaluation_controller.list_evaluations(
-            page=page, 
-            page_size=page_size, 
-            search_params=search_params.dict(exclude_none=True)
+            page=page, page_size=page_size, search_params=search_params.dict(exclude_none=True)
         )
-        
+
         data = await employee_evaluation_controller.evaluations_to_dict(evaluations, include_relations=True)
         return Success(data=data, total=total)
     except Exception as e:
@@ -101,7 +100,9 @@ async def get_evaluation(
     try:
         evaluation = await employee_evaluation_controller.get_evaluation_by_id(id, include_relations=include_relations)
         if evaluation:
-            data = await employee_evaluation_controller.evaluation_to_dict(evaluation, include_relations=include_relations)
+            data = await employee_evaluation_controller.evaluation_to_dict(
+                evaluation, include_relations=include_relations
+            )
             return Success(data=data)
         else:
             return Fail(msg="評価が見つかりません")
@@ -112,13 +113,13 @@ async def get_evaluation(
 @router.post("/create", summary="社員評価作成")
 async def create_evaluation(
     data: CreateEmployeeEvaluationSchema = Body(..., description="評価作成データ"),
-    evaluator_id: int = Query(..., description="評価者ID")
+    evaluator_id: int = Query(..., description="評価者ID"),
 ):
     """社員評価を作成"""
     try:
         evaluation_data = data.dict(exclude_none=True)
         evaluation = await employee_evaluation_controller.create_evaluation(evaluation_data, evaluator_id)
-        
+
         result = await employee_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=result, msg="評価が正常に作成されました")
     except ValueError as e:
@@ -136,7 +137,7 @@ async def update_evaluation(
     try:
         evaluation_data = data.dict(exclude_none=True)
         evaluation = await employee_evaluation_controller.update_evaluation(id, evaluation_data)
-        
+
         if evaluation:
             result = await employee_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
             return Success(data=result, msg="評価情報が正常に更新されました")
@@ -149,9 +150,7 @@ async def update_evaluation(
 
 
 @router.delete("/delete", summary="社員評価削除")
-async def delete_evaluation(
-    id: int = Query(..., description="評価ID")
-):
+async def delete_evaluation(id: int = Query(..., description="評価ID")):
     """社員評価を削除"""
     try:
         success = await employee_evaluation_controller.delete_evaluation(id)
@@ -179,7 +178,7 @@ async def get_employee_evaluations(
         evaluations, total = await employee_evaluation_controller.get_employee_evaluations(
             employee, page=page, page_size=page_size
         )
-        
+
         data = await employee_evaluation_controller.evaluations_to_dict(evaluations, include_relations=True)
         return Success(data=data, total=total)
     except Exception as e:
@@ -190,7 +189,7 @@ async def get_employee_evaluations(
 async def create_employee_evaluation(
     employee_id: int,
     data: CreateEmployeeEvaluationSchema = Body(..., description="評価作成データ"),
-    evaluator_id: int = Query(..., description="評価者ID")
+    evaluator_id: int = Query(..., description="評価者ID"),
 ):
     """特定社員の評価を作成"""
     try:
@@ -200,12 +199,12 @@ async def create_employee_evaluation(
 
         evaluation_data = data.dict(exclude_none=True)
         # employee_idをURLパラメータから設定（Bodyのデータを上書き）
-        evaluation_data['employee_id'] = employee_id
-        
+        evaluation_data["employee_id"] = employee_id
+
         evaluation = await employee_evaluation_controller.create_employee_evaluation(
             employee, evaluation_data, evaluator_id
         )
-        
+
         result = await employee_evaluation_controller.evaluation_to_dict(evaluation, include_relations=True)
         return Success(data=result, msg="評価が正常に作成されました")
     except ValueError as e:
@@ -239,16 +238,16 @@ async def get_top_rated_employees(
         employees = await employee_evaluation_controller.get_top_rated_employees(
             limit=limit, min_evaluations=min_evaluations
         )
-        
+
         # 社員データを辞書形式に変換
         employees_data = []
         for employee in employees:
             employee_dict = await employee.to_dict()
             # 評価サマリーも追加
             summary = await employee_evaluation_controller.get_employee_evaluation_summary(employee)
-            employee_dict['evaluation_summary'] = summary
+            employee_dict["evaluation_summary"] = summary
             employees_data.append(employee_dict)
-        
+
         return Success(data=employees_data, total=len(employees_data))
     except Exception as e:
         return Fail(msg=str(e))
@@ -276,30 +275,31 @@ async def get_evaluation_dashboard():
     try:
         # 今月の評価統計
         from datetime import datetime
+
         today = datetime.now().date()
         start_of_month = today.replace(day=1)
-        
+
         monthly_stats = await employee_evaluation_controller.get_evaluation_stats_by_period(start_of_month, today)
-        
+
         # 高評価社員トップ5
         top_employees = await employee_evaluation_controller.get_top_rated_employees(limit=5, min_evaluations=2)
         top_employees_data = []
         for employee in top_employees:
             employee_dict = await employee.to_dict()
             summary = await employee_evaluation_controller.get_employee_evaluation_summary(employee)
-            employee_dict['evaluation_summary'] = summary
+            employee_dict["evaluation_summary"] = summary
             top_employees_data.append(employee_dict)
-        
+
         dashboard_data = {
             "monthly_stats": monthly_stats,
             "top_employees": top_employees_data,
             "summary": {
-                "total_evaluations_this_month": monthly_stats['total_evaluations'],
-                "average_rating_this_month": monthly_stats['average_overall_rating'],
-                "recommendation_rate_this_month": monthly_stats['recommendation_rate']
-            }
+                "total_evaluations_this_month": monthly_stats["total_evaluations"],
+                "average_rating_this_month": monthly_stats["average_overall_rating"],
+                "recommendation_rate_this_month": monthly_stats["recommendation_rate"],
+            },
         }
-        
+
         return Success(data=dashboard_data)
     except Exception as e:
         return Fail(msg=str(e))
