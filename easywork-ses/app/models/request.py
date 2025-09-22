@@ -3,7 +3,7 @@ from datetime import datetime
 from tortoise import fields
 
 from app.models.base import BaseModel, TimestampMixin
-from app.models.enums import RequestStatus
+from app.models.enums import AttachmentType, RequestStatus
 
 
 class Request(BaseModel, TimestampMixin):
@@ -36,7 +36,6 @@ class Request(BaseModel, TimestampMixin):
 
     # 文書管理
     request_document_url = fields.CharField(max_length=500, null=True, description="請求書PDF URL")
-    order_document_url = fields.CharField(max_length=500, null=True, description="注文書PDF URL（Client提供）")
 
     # ステータス管理
     status = fields.CharEnumField(RequestStatus, default=RequestStatus.DRAFT, description="ステータス")
@@ -190,7 +189,6 @@ class Request(BaseModel, TimestampMixin):
             "payment_amount": float(self.payment_amount) if self.payment_amount else None,
             # 文書情報
             "request_document_url": self.request_document_url,
-            "order_document_url": self.order_document_url,
             # その他
             "remark": self.remark,
         }
@@ -226,3 +224,35 @@ class RequestItem(BaseModel, TimestampMixin):
 
     def __str__(self):
         return f"RequestItem-{self.request.request_number if self.request else 'Unknown'}-{self.personnel.name if self.personnel else 'Unknown'}"
+
+
+class RequestAttachment(BaseModel, TimestampMixin):
+    """
+    請求書附件 - 管理請求書相关的各种附件文件
+
+    包括考勤表、补充文档等各种附件
+    """
+
+    # 関連エンティティ
+    request = fields.ForeignKeyField("models.Request", related_name="attachments", description="請求書")
+
+    # 文件信息
+    file_url = fields.CharField(max_length=500, description="文件URL")
+
+    # 附件类型分类
+    attachment_type = fields.CharEnumField(AttachmentType, default=AttachmentType.OTHER, description="附件类型")
+
+    # 備考
+    remark = fields.CharField(max_length=500, null=True, description="備考")
+
+    class Meta:
+        table = "request_attachments"
+        table_description = "請求書附件管理"
+        indexes = [
+            ("request_id",),
+            ("attachment_type",),
+            ("file_type",),
+        ]
+
+    def __str__(self):
+        return f"Attachment-{self.file_name}-{self.request.request_number if self.request else 'Unknown'}"

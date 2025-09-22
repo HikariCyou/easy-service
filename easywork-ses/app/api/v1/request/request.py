@@ -12,11 +12,9 @@ from app.models.enums import RequestStatus
 from app.schemas import Fail, Success
 from app.schemas.mail import MailTemplateRequest, SendMailRequest
 from app.schemas.request import (
-    FileUploadRequest,
+    RequestAttachmentCreate,
     RequestCreate,
-    RequestDetail,
     RequestGenerationRequest,
-    RequestListItem,
     RequestPaymentUpdate,
     RequestSendRequest,
     RequestUpdate,
@@ -29,10 +27,13 @@ router = APIRouter()
 
 
 @router.post("/create", summary="請求書作成")
-async def create_request(request_data: RequestCreate):
+async def create_request(
+    request_data: RequestCreate,
+    authorization: Optional[str] = Header(None)
+):
     """請求書を作成する"""
     try:
-        request = await RequestController.create_request(request_data)
+        request = await RequestController.create_request(request_data, authorization)
         detail = await request.get_full_details()
         detail["id"] = request.id
         return Success(data=detail)
@@ -268,8 +269,10 @@ async def send_request_mail(
         if not req:
             return Fail(msg="請求書が見つかりません")
 
-        # 添付ファイル準備 - S3から請求書PDFダウンロード
+        # 添付ファイル準備
         attachment_files = []
+
+        # 1. 請求書PDFを添付
         if req.request_document_url:
             try:
                 # S3 URLからkeyを抽出
@@ -289,7 +292,39 @@ async def send_request_mail(
                     attachment_files.append((filename, file_content, "application/pdf"))
 
             except Exception as e:
-                logger.error(f"S3ファイル取得エラー: {str(e)}")
+                logger.error(f"請求書PDFファイル取得エラー: {str(e)}")
+
+        try:
+            from app.models.request import RequestAttachment
+            attachments = await RequestAttachment.filter(request_id=request_id).all()
+
+            for attachment in attachments:
+                try:
+                    # S3 URLからkeyを抽出
+                    if "amazonaws.com/" in attachment.file_url:
+                        s3_key = attachment.file_url.split("amazonaws.com/")[-1].split("?")[0]
+                    else:
+                        s3_key = attachment.file_url
+
+                    # S3からファイル内容取得
+                    file_content = await s3_client.get_file_content(s3_key)
+                    if file_content:
+                        # ファイル名を推測（URLの最後の部分）
+                        filename = s3_key.split("/")[-1]
+                        # MIMEタイプを推測
+                        content_type = "application/octet-stream"
+                        if filename.endswith('.pdf'):
+                            content_type = "application/pdf"
+                        elif filename.endswith('.xlsx') or filename.endswith('.xls'):
+                            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+                        attachment_files.append((filename, file_content, content_type))
+
+                except Exception as e:
+                    logger.error(f"附件ファイル取得エラー ({attachment.id}): {str(e)}")
+
+        except Exception as e:
+            logger.error(f"附件リスト取得エラー: {str(e)}")
 
         # メール送信
         await mail_sender.send_mail_with_attachments(
@@ -347,3 +382,80 @@ async def get_requests_by_case(
         return Success(data=result["items"], total=result["total"])
     except Exception as e:
         return Fail(msg=f"案件別請求書一覧取得でエラーが発生しました: {str(e)}")
+
+
+# 附件管理接口
+@router.post("/{request_id}/attachments", summary="添加请求书附件")
+async def add_request_attachment(
+    request_id: int,
+    attachment_data: RequestAttachmentCreate
+):
+    """添加请求书附件记录"""
+    try:
+        # 验证请求书存在
+        request = await RequestController.get_request_by_id(request_id)
+        if not request:
+            return Fail(msg="請求書が見つかりません")
+
+        # 创建附件记录
+        from app.models.request import RequestAttachment
+        attachment = await RequestAttachment.create(
+            request_id=request_id,
+            file_url=attachment_data.file_url,
+            attachment_type=attachment_data.attachment_type
+        )
+
+        return Success(data={
+            "id": attachment.id,
+            "file_url": attachment.file_url,
+            "attachment_type": attachment.attachment_type
+        })
+    except Exception as e:
+        return Fail(msg=f"附件添加でエラーが発生しました: {str(e)}")
+
+
+@router.get("/{request_id}/attachments", summary="请求书附件列表")
+async def get_request_attachments(request_id: int):
+    """获取请求书附件列表"""
+    try:
+        from app.models.request import RequestAttachment
+        attachments = await RequestAttachment.filter(request_id=request_id).all()
+
+        attachment_list = []
+        for attachment in attachments:
+            attachment_list.append({
+                "id": attachment.id,
+                "file_url": attachment.file_url,
+                "attachment_type": attachment.attachment_type,
+                "remark": attachment.remark,
+                "created_at": attachment.created_at
+            })
+
+        return Success(data=attachment_list)
+    except Exception as e:
+        return Fail(msg=f"附件列表取得でエラーが発生しました: {str(e)}")
+
+
+@router.delete("/attachments/{attachment_id}", summary="删除请求书附件")
+async def delete_request_attachment(attachment_id: int):
+    """删除请求书附件"""
+    try:
+        from app.models.request import RequestAttachment
+        attachment = await RequestAttachment.get_or_none(id=attachment_id)
+        if not attachment:
+            return Fail(msg="附件が見つかりません")
+
+        # 从S3删除文件
+        try:
+            if "amazonaws.com/" in attachment.file_url:
+                s3_key = attachment.file_url.split("amazonaws.com/")[-1].split("?")[0]
+                await s3_client.delete_file(s3_key)
+        except Exception as e:
+            logger.error(f"S3ファイル削除エラー: {str(e)}")
+
+        # 删除数据库记录
+        await attachment.delete()
+
+        return Success(data={"message": "附件を削除しました"})
+    except Exception as e:
+        return Fail(msg=f"附件削除でエラーが発生しました: {str(e)}")

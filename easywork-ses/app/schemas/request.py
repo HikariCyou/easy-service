@@ -37,7 +37,6 @@ class RequestBase(BaseModel):
     year_month: str = Field(..., description="対象年月（YYYY-MM）")
     client_company_id: int = Field(..., description="Client会社ID")
     items: List[RequestItemCreate] = Field(..., description="請求書明細項目リスト")
-    tax_rate: Decimal = Field(10.0, description="税率（%）")
     payment_due_date: Optional[date] = Field(None, description="支払期限")
     remark: Optional[str] = Field(None, description="備考")
 
@@ -62,13 +61,6 @@ class RequestBase(BaseModel):
 
         return v
 
-    @validator("tax_rate")
-    def validate_tax_rate(cls, v):
-        """税率検証"""
-        if v is not None and (v < 0 or v > 100):
-            raise ValueError("税率は0-100の範囲で入力してください")
-        return v
-
     @validator("items")
     def validate_items(cls, v):
         """明細項目検証"""
@@ -77,10 +69,32 @@ class RequestBase(BaseModel):
         return v
 
 
-class RequestCreate(RequestBase):
+class RequestCreate(BaseModel):
     """請求書作成スキーマ"""
+    year_month: str = Field(..., description="対象年月（YYYY-MM）")
+    client_company_id: int = Field(..., description="Client会社ID")
+    personnel_ids: list[int] = Field(..., description="対象要員IDリスト")
 
-    pass
+    @validator("year_month")
+    def validate_year_month(cls, v):
+        """年月フォーマット検証"""
+        if not v:
+            raise ValueError("年月は必須です")
+
+        parts = v.split("-")
+        if len(parts) != 2:
+            raise ValueError("年月はYYYY-MM形式で入力してください")
+
+        try:
+            year, month = int(parts[0]), int(parts[1])
+            if year < 2020 or year > 2030:
+                raise ValueError("年は2020-2030の範囲で入力してください")
+            if month < 1 or month > 12:
+                raise ValueError("月は1-12の範囲で入力してください")
+        except ValueError:
+            raise ValueError("年月は有効な数値で入力してください")
+
+        return v
 
 
 class RequestUpdate(BaseModel):
@@ -243,15 +257,8 @@ class RequestSendRequest(BaseModel):
     sent_by: str = Field(..., description="送信者名")
 
 
-class FileUploadRequest(BaseModel):
-    """ファイルアップロードリクエストスキーマ"""
+class RequestAttachmentCreate(BaseModel):
+    """請求書附件添加スキーマ"""
 
-    file_type: str = Field(..., description="ファイルタイプ (order_document/request_document)")
-
-    @validator("file_type")
-    def validate_file_type(cls, v):
-        """ファイルタイプ検証"""
-        valid_types = ["order_document", "request_document"]
-        if v not in valid_types:
-            raise ValueError(f"ファイルタイプは {valid_types} から選択してください")
-        return v
+    file_url: str = Field(..., description="文件URL")
+    attachment_type: str = Field(default="other", description="附件类型")

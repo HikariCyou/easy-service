@@ -33,7 +33,7 @@ class RequestController:
     """請求書コントローラー"""
 
     @staticmethod
-    async def create_request(request_data: RequestCreate) -> Request:
+    async def create_request(request_data: RequestCreate, token: str = None) -> Request:
         """請求書作成（複数要員対応）"""
 
         # 重複チェック
@@ -50,58 +50,63 @@ class RequestController:
         if not client_company:
             raise ValueError("指定されたClient会社が見つかりません")
 
-        # 明細項目の検証
-        if not request_data.items:
-            raise ValueError("請求書明細項目は必須です")
+        # 要員IDの検証
+        if not request_data.personnel_ids:
+            raise ValueError("対象要員IDは必須です")
 
+        # 获取动态税率
+        try:
+            tax_rate = await sso_client.get_tax_rate(token)
+        except Exception:
+            tax_rate = 10.0  # 默认税率
+
+        # 指定された要員の有効契約を取得
+        contracts = (
+            await Contract.filter(
+                status=ContractStatus.ACTIVE,
+                personnel_id__in=request_data.personnel_ids,
+                case__client_company_id=request_data.client_company_id,
+            )
+            .prefetch_related("case", "personnel", "calculation_items")
+            .all()
+        )
+
+        if not contracts:
+            raise ValueError("指定された要員の有効契約が見つかりません")
+
+        # 要員ごとに明細項目を準備
         validated_items = []
         total_amount = 0
 
-        for item_data in request_data.items:
-            # 要員検証
-            personnel = await Personnel.get_or_none(id=item_data.personnel_id)
-            if not personnel:
-                raise ValueError(f"要員ID {item_data.personnel_id} が見つかりません")
+        for contract in contracts:
+            # 基本給取得（万元存储）
+            basic_salary = 0.0
+            calculation_items = await contract.calculation_items.all()
+            for item in calculation_items:
+                if item.item_type == ContractItemType.BASIC_SALARY.value:
+                    basic_salary = float(item.amount)  # 万元，直接存储
+                    break
 
-            # 案件検証
-            case = await Case.get_or_none(id=item_data.case_id)
-            if not case:
-                raise ValueError(f"案件ID {item_data.case_id} が見つかりません")
-
-            # 案件がClient会社に属するかチェック
-            if case.client_company_id != request_data.client_company_id:
-                raise ValueError(f"案件ID {item_data.case_id} は指定されたClient会社に属していません")
-
-            # 契約検証
-            contract = await Contract.get_or_none(id=item_data.contract_id)
-            if not contract:
-                raise ValueError(f"契約ID {item_data.contract_id} が見つかりません")
-
-            # 契約が有効かチェック
-            if contract.status != ContractStatus.ACTIVE:
-                raise ValueError(f"契約ID {item_data.contract_id} は有効ではありません")
-
-            # 契約と案件・要員の関連チェック
-            if contract.case_id != item_data.case_id:
-                raise ValueError(f"契約ID {item_data.contract_id} は案件ID {item_data.case_id} に関連していません")
-
-            if contract.personnel_id != item_data.personnel_id:
-                raise ValueError(f"契約ID {item_data.contract_id} は要員ID {item_data.personnel_id} に関連していません")
+            personnel = await contract.personnel
+            case = await contract.case
 
             validated_items.append({
-                'item_data': item_data,
-                'personnel': personnel,
-                'case': case,
-                'contract': contract
+                'personnel_id': personnel.id,
+                'case_id': case.id,
+                'contract_id': contract.id,
+                'item_amount': basic_salary,
+                'work_hours': contract.standard_working_hours or 160.0,
+                'unit_price': basic_salary,  # 月額の場合，单价=基本給
+                'item_remark': f"{request_data.year_month}分"
             })
-            total_amount += float(item_data.item_amount)
+            total_amount += basic_salary
 
         # 請求番号生成
         request_number = await RequestController._generate_request_number(request_data.year_month)
 
-        # 税抜き金額と税込み金額計算
+        # 税抜き金額と税込み金額計算（使用动态税率）
         tax_excluded_amount = total_amount
-        tax_amount = tax_excluded_amount * float(request_data.tax_rate) / 100
+        tax_amount = tax_excluded_amount * tax_rate / 100
         request_amount = tax_excluded_amount + tax_amount
 
         # 請求書作成
@@ -113,23 +118,21 @@ class RequestController:
                 request_amount=request_amount,
                 calculation_amount=request_amount,  # 初期値として税込み金額をセット
                 tax_excluded_amount=tax_excluded_amount,
-                tax_rate=request_data.tax_rate,
-                payment_due_date=request_data.payment_due_date,
-                remark=request_data.remark,
+                tax_rate=tax_rate,  # 使用动态税率
+                remark=f"{request_data.year_month}の月度請求書",
             )
 
             # 明細項目作成
-            for item_info in validated_items:
-                item_data = item_info['item_data']
+            for item_data in validated_items:
                 await RequestItem.create(
                     request_id=request.id,
-                    personnel_id=item_data.personnel_id,
-                    case_id=item_data.case_id,
-                    contract_id=item_data.contract_id,
-                    item_amount=item_data.item_amount,
-                    work_hours=item_data.work_hours or 160.0,
-                    unit_price=item_data.unit_price,
-                    item_remark=item_data.item_remark,
+                    personnel_id=item_data['personnel_id'],
+                    case_id=item_data['case_id'],
+                    contract_id=item_data['contract_id'],
+                    item_amount=item_data['item_amount'],
+                    work_hours=item_data['work_hours'],
+                    unit_price=item_data['unit_price'],
+                    item_remark=item_data['item_remark'],
                 )
 
         return request
@@ -334,8 +337,8 @@ class RequestController:
 
             # 明细項目作成用データ（以万元存储）
             item_data = {
-                'personnel_id': contract.personnel_id,
-                'case_id': contract.case_id,
+                'personnel_id': contract.personnel.id,
+                'case_id': contract.case.id,
                 'contract_id': contract.id,
                 'item_amount': basic_salary,
                 'work_hours': contract.standard_working_hours or 160.0,

@@ -99,8 +99,8 @@ class MailSender:
                 # 没有附件，使用HTML或纯文本
                 msg = MIMEText(email_content, content_type, "utf-8")
 
-            # 设置相同的邮件头 - 保持与工作版本一致
-            msg["Subject"] = subject
+            # 设置完整的邮件头，包括编码处理
+            msg["Subject"] = Header(subject, "utf-8")
             msg["From"] = self.from_email
             msg["To"] = to_email
             msg["Date"] = utils.formatdate(localtime=True)
@@ -127,33 +127,32 @@ class MailSender:
     async def send_mail_with_attachments(
         self, mail: str, attachment_files: List[tuple] = None, template_params: Dict[str, Any] = None
     ):
+        # 获取邮件内容
         if template_params:
-            subject = template_params.get("subject", "")
-            content = template_params.get("content", "Hello World")
-            cc_str = template_params.get("cc", "")
-            bcc_str = template_params.get("bcc", "")
-            is_html = template_params.get("is_html", True)  # 默认使用HTML格式
+            subject = template_params.get("subject", "HTML附件测试邮件")
+            content = template_params.get("content", "<h1>测试邮件</h1>")
         else:
-            subject = "EasyWork邮件"
-            content = "<h1>Hello World</h1><p>这是来自EasyWork系统的邮件</p>"
-            cc_str = ""
-            bcc_str = ""
-            is_html = True
+            subject = "HTML附件测试邮件"
+            content = "<h1>测试邮件</h1>"
 
-        # 解析抄送邮箱
-        cc_emails = [email.strip() for email in cc_str.split(",") if email.strip()] if cc_str else None
-        bcc_emails = [email.strip() for email in bcc_str.split(",") if email.strip()] if bcc_str else None
+        html_content = f"""
+           <!DOCTYPE html>
+            <html lang="ja">
+            <head>
+            <meta charset="UTF-8">
+            </head>
+            <body>
+            {content}
+            </body>
+            </html>
+        """
 
-        # 调用完整的send_email方法，默认发送HTML邮件
-        self.send_email(
+        mail_sender.send_email(
             to_email=mail,
             subject=subject,
-            html_body=content if is_html else None,
-            body=content if not is_html else None,
+            html_body=html_content,
             attachment_files=attachment_files,
-            cc_emails=cc_emails,
-            bcc_emails=bcc_emails,
-            is_html=is_html,
+            is_html=True,
         )
 
 
@@ -201,36 +200,49 @@ def test_attachment_mail():
         test_content = "这是测试附件内容".encode("utf-8")
         attachment_files = [("测试文件.txt", test_content)]
 
-        # HTML邮件内容
-        html_content = """
-        <html>
-        <body>
-            <h2 style="color: #2e7d32;">附件邮件测试</h2>
-            <p>这是一封带有<strong>HTML格式</strong>和<strong>附件</strong>的测试邮件。</p>
-            <div style="background-color: #f5f5f5; padding: 10px; border-left: 4px solid #2e7d32;">
-                <p><strong>附件信息：</strong></p>
-                <ul>
-                    <li>文件名：测试文件.txt</li>
-                    <li>文件类型：文本文件</li>
-                </ul>
-            </div>
-            <p style="margin-top: 20px; color: #666;">
-                请查收附件内容。
-            </p>
-        </body>
-        </html>
+        # 清理HTML内容，去掉可能有问题的字符
+        real_content = """
+        <!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+</head>
+<body>
+<p><strong>株式会社KYO! 御中</strong></p>
+<p>いつもお世話になっております。</p>
+<p>株式会社TOBでございます。</p>
+<p>次の通りお送り致しますので、ご確認、ご対応の程お願い申し上げます。</p>
+<p>なお、添付ファイルの解凍パスワードは、追って別メールでお知らせ致します。</p>
+
+<p><strong>《送付物》</strong></p>
+<p>「注文書」</p>
+<p>「注文請書」</p>
+<p>各1通</p>
+
+<p><strong>《お願い》</strong></p>
+<p>1.8月分の御注文内容の御確認</p>
+<p> 「注文書」</p>
+<p>2.問題有り</p>
+<p> メールに記載し御返信</p>
+<p>3.問題無し</p>
+<p> 「注文請書」に署名・捺印の上、PDFをご返送ください。</p>
+
+<p>締切：8月15日</p>
+<p>御手数ではございますが、ご協力の程お願い申し上げます。</p>
+</body>
+</html>
         """
 
         mail_sender.send_email(
             to_email="742525070@qq.com",
-            subject="HTML附件测试邮件",
-            html_body=html_content,
+            subject="真实内容测试邮件",
+            html_body=real_content,
             attachment_files=attachment_files,
             is_html=True,
         )
-        print("=== HTML附件测试成功 ===")
+        print("=== 真实内容测试成功 ===")
     except Exception as e:
-        print(f"=== 附件测试失败: {e} ===")
+        print(f"=== 真实内容测试失败: {e} ===")
         import traceback
 
         traceback.print_exc()

@@ -8,6 +8,6 @@ from .enums import *
 from .evaluation import *
 from .order import *
 from .personnel import *
-from .request import *
+from .request import Request, RequestItem, RequestAttachment
 from .skill import *
 from .storage import *

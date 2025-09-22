@@ -380,6 +380,16 @@ class RequestStatus(StrEnum):
     PAID = "paid"  # 已支付
 
 
+class AttachmentType(StrEnum):
+    """附件类型枚举"""
+
+    ORDER_DOCUMENT = "order_document"  # 注文書
+    ATTENDANCE = "attendance"  # 勤怠表
+    CONTRACT = "contract"  # 契約書
+    INVOICE = "invoice"  # 請求書
+    OTHER = "other"  # その他
+
+
 class WeeklyMoodStatus(StrEnum):
     """週間心情状态枚举"""
 
