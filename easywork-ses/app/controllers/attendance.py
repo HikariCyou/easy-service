@@ -650,12 +650,20 @@ class AttendanceController:
             # 案件信息
             case_info = None
             if current_contract and current_contract.case:
+                # 基本給取得（万元存储）
+                basic_salary = 0.0
+                calculation_items = await current_contract.calculation_items.all()
+                for item in calculation_items:
+                    if item.item_type == "basic_salary":
+                        basic_salary = float(item.amount)
+                        break
+
                 case_info = {
                     "case_title": current_contract.case.title,
                     "client_company": current_contract.case.client_company.company_name
                     if current_contract.case.client_company
                     else "未設定",
-                    "unit_price": float(current_contract.unit_price) if current_contract.unit_price else 0,
+                    "unit_price": basic_salary * 10000,  # 万元转为元显示
                     "contract_period": f"{current_contract.contract_start_date} 〜 {current_contract.contract_end_date}",
                 }
 
