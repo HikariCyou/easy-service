@@ -28,6 +28,7 @@ from app.schemas.attendance import (
     DailyAttendanceSchema,
     UpdateDailyAttendanceSchema,
 )
+from app.utils.s3_client import s3_client
 from app.utils.common import to_hhmm
 
 
@@ -84,9 +85,17 @@ class AttendanceController:
         if not attendance:
             raise Exception("出勤記録が見つかりません")
 
-        # 承認済みの記録は更新不可
-        if attendance.approved_status == ApproveStatus.APPROVED:
-            raise Exception("承認済みの出勤記録は更新できません")
+        # 获取对应月份的年月字符串
+        year_month = attendance.work_date.strftime("%Y-%m")
+
+        # 检查该月份的MonthlyAttendance是否已被批准
+        monthly_attendance = await MonthlyAttendance.get_or_none(
+            user_id=attendance.user_id,
+            year_month=year_month
+        )
+
+        if monthly_attendance and monthly_attendance.status == ApproveStatus.APPROVED:
+            raise Exception("承認済みの月次出勤記録に含まれる日次記録は更新できません")
 
         # 更新
         update_dict = update_data.dict(exclude_unset=True, exclude_none=True)
@@ -497,12 +506,22 @@ class AttendanceController:
             start_date = target_date - timedelta(days=days_since_monday)
             end_date = start_date + timedelta(days=6)
         elif period_type == "month":
-            start_date = target_date.replace(day=1)
-            if target_date.month == 12:
-                next_month = target_date.replace(year=target_date.year + 1, month=1, day=1)
+            # 获取前一个月、当前月、下一个月的数据
+            # 前一个月的第一天
+            if target_date.month == 1:
+                prev_month = target_date.replace(year=target_date.year - 1, month=12, day=1)
             else:
-                next_month = target_date.replace(month=target_date.month + 1, day=1)
-            end_date = next_month - timedelta(days=1)
+                prev_month = target_date.replace(month=target_date.month - 1, day=1)
+            start_date = prev_month
+
+            # 下一个月的最后一天
+            if target_date.month == 11:
+                next_next_month = target_date.replace(year=target_date.year + 1, month=1, day=1)
+            elif target_date.month == 12:
+                next_next_month = target_date.replace(year=target_date.year + 1, month=2, day=1)
+            else:
+                next_next_month = target_date.replace(month=target_date.month + 2, day=1)
+            end_date = next_next_month - timedelta(days=1)
         else:
             raise Exception("無効な期間タイプです。day/week/monthのいずれかを指定してください")
 
@@ -517,7 +536,6 @@ class AttendanceController:
         # 勤怠データを整形
         attendance_data = []
         total_working_hours = 0.0
-        approved_count = 0
 
         for record in attendance_records:
             record_dict = await record.to_dict()
@@ -1155,9 +1173,10 @@ class AttendanceController:
 
         return monthly_dict
 
-    async def get_attendance_data_for_export(
+
+    async def _generate_attendance_bytes_io(
         self, user_id: int, year_month: str, include_summary: bool
-    ) -> StreamingResponse:
+    ):
         year, month = map(int, year_month.split("-"))
         from calendar import monthrange
         from datetime import date
@@ -1531,10 +1550,29 @@ class AttendanceController:
                 )
 
         output.seek(0)
+        return output
+
+    async def get_attendance_data_for_export(
+        self, user_id: int, year_month: str, include_summary: bool
+    ) -> StreamingResponse:
+
+        output = await  self._generate_attendance_bytes_io(user_id, year_month, include_summary)
         headers = {"Content-Disposition": 'attachment; filename="attendance_export.xlsx"'}
         return StreamingResponse(
             output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers
         )
+
+    async def get_attendance_date_s3_url(self, user_id: int, user_name:str,  year_month: str, include_summary: bool) -> str:
+        """生成考勤Excel并上传到S3，返回预签名URL"""
+        output = await  self._generate_attendance_bytes_io(user_id, year_month, include_summary)
+
+        # 生成唯一的文件名
+        file_key = f"attendance_exports/勤怠_{user_name}_{year_month}月.xlsx"
+
+        # 上传到S3
+
+        s3_url = await s3_client.upload_fileobj(output, file_key, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return s3_url
 
 
 # グローバルインスタンス

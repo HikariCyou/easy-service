@@ -251,8 +251,7 @@ class RequestAttachment(BaseModel, TimestampMixin):
         indexes = [
             ("request_id",),
             ("attachment_type",),
-            ("file_type",),
         ]
 
     def __str__(self):
-        return f"Attachment-{self.file_name}-{self.request.request_number if self.request else 'Unknown'}"
+        return f"Attachment-{self.attachment_type.value}-{self.request.request_number if self.request else 'Unknown'}"

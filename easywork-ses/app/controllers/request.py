@@ -13,9 +13,10 @@ from app.core.user_client import sso_client
 from app.models.case import Case
 from app.models.client import ClientCompany
 from app.models.contract import Contract
-from app.models.enums import ContractItemType, ContractStatus, RequestStatus
+from app.models.enums import ContractItemType, ContractStatus, RequestStatus, AttachmentType
 from app.models.personnel import Personnel
-from app.models.request import Request, RequestItem
+from app.models.request import Request, RequestItem, RequestAttachment
+from app.controllers.attendance import attendance_controller
 from app.schemas.request import (
     RequestCreate,
     RequestDetail,
@@ -39,7 +40,8 @@ class RequestController:
         # 重複チェック
         existing = await Request.filter(
             client_company_id=request_data.client_company_id,
-            year_month=request_data.year_month
+            year_month=request_data.year_month,
+            status__in=[RequestStatus.SENT, RequestStatus.PAID],
         ).first()
 
         if existing:
@@ -110,30 +112,34 @@ class RequestController:
         request_amount = tax_excluded_amount + tax_amount
 
         # 請求書作成
-        async with in_transaction():
-            request = await Request.create(
-                request_number=request_number,
-                year_month=request_data.year_month,
-                client_company_id=request_data.client_company_id,
-                request_amount=request_amount,
-                calculation_amount=request_amount,  # 初期値として税込み金額をセット
-                tax_excluded_amount=tax_excluded_amount,
-                tax_rate=tax_rate,  # 使用动态税率
-                remark=f"{request_data.year_month}の月度請求書",
-            )
-
-            # 明細項目作成
-            for item_data in validated_items:
-                await RequestItem.create(
-                    request_id=request.id,
-                    personnel_id=item_data['personnel_id'],
-                    case_id=item_data['case_id'],
-                    contract_id=item_data['contract_id'],
-                    item_amount=item_data['item_amount'],
-                    work_hours=item_data['work_hours'],
-                    unit_price=item_data['unit_price'],
-                    item_remark=item_data['item_remark'],
+        if not existing:
+            async with in_transaction():
+                request = await Request.create(
+                    request_number=request_number,
+                    year_month=request_data.year_month,
+                    client_company_id=request_data.client_company_id,
+                    request_amount=request_amount,
+                    calculation_amount=request_amount,  # 初期値として税込み金額をセット
+                    tax_excluded_amount=tax_excluded_amount,
+                    tax_rate=tax_rate,  # 使用动态税率
+                    remark=f"{request_data.year_month}の月度請求書",
                 )
+
+                # 明細項目作成
+                for item_data in validated_items:
+                    await RequestItem.create(
+                        request_id=request.id,
+                        personnel_id=item_data['personnel_id'],
+                        case_id=item_data['case_id'],
+                        contract_id=item_data['contract_id'],
+                        item_amount=item_data['item_amount'],
+                        work_hours=item_data['work_hours'],
+                        unit_price=item_data['unit_price'],
+                        item_remark=item_data['item_remark'],
+                    )
+
+        # 勤怠データのExcel生成とS3アップロード
+        await RequestController._generate_attendance_attachments(request, request_data.personnel_ids, request_data.year_month)
 
         return request
 
@@ -201,9 +207,6 @@ class RequestController:
         if not request:
             return False
 
-        # 送信済みの請求書は削除不可
-        if request.is_sent:
-            raise ValueError("送信済みの請求書は削除できません")
 
         await request.delete()
         return True
@@ -603,3 +606,29 @@ class RequestController:
             "outstanding_amount": total_amount - paid_amount,
             "status_breakdown": status_stats,
         }
+
+    @staticmethod
+    async def _generate_attendance_attachments(request: Request, personnel_ids: List[int], year_month: str):
+        """勤怠データのExcel生成とS3アップロード、添付ファイル登録"""
+        for personnel_id in personnel_ids:
+            try:
+                # 勤怠ExcelをS3にアップロードしてURLを取得
+                personnel = await Personnel.get_or_none(id=personnel_id)
+                user_id  = personnel.user_id if personnel else None
+                s3_url = await attendance_controller.get_attendance_date_s3_url(
+                    user_id=user_id,
+                    user_name=personnel.name if personnel else "Unknown",
+                    year_month=year_month,
+                    include_summary=True
+                )
+
+                # 添付ファイルレコードを作成
+                await RequestAttachment.create(
+                    request=request,
+                    file_url=s3_url,
+                    attachment_type=AttachmentType.ATTENDANCE
+                )
+            except Exception as e:
+                # ログ出力（個別の失敗でも処理を継続）
+                print(f"Failed to generate attendance attachment for personnel {personnel_id}: {str(e)}")
+                continue
