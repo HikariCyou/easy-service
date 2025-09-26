@@ -6,6 +6,7 @@ from .client import *
 from .contract import *
 from .enums import *
 from .evaluation import *
+from .finance import *
 from .order import *
 from .personnel import *
 from .request import Request, RequestItem, RequestAttachment

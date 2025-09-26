@@ -465,3 +465,103 @@ class TimeCalculationType(StrEnum):
     HOURLY_RATE = "時給"  # 実働時間×時給での純粋時給制
     CUSTOM_CALCULATION = "自定義計算"  # プロジェクト固有の計算方式
     OTHER = "その他"  # 上記以外の特殊な計算方式
+
+
+# 財務管理関連のEnum定義
+class FinanceTransactionType(StrEnum):
+    """財務取引種別"""
+
+    INCOME = "INCOME"  # 収入
+    EXPENSE = "EXPENSE"  # 支出
+
+
+
+
+class FinanceStatus(StrEnum):
+    """財務取引ステータス"""
+
+    PENDING = "保留中"  # 保留中
+    PROCESSING = "処理中"  # 処理中
+    COMPLETED = "完了"  # 完了
+    CANCELLED = "キャンセル"  # キャンセル
+
+
+class FinancePaymentMethod(StrEnum):
+    """支払方法"""
+
+    BANK_TRANSFER = "銀行振込"  # 銀行振込
+    CREDIT_CARD = "クレジットカード"  # クレジットカード
+    CASH = "現金"  # 現金
+    CHECK = "小切手"  # 小切手
+    ELECTRONIC_MONEY = "電子マネー"  # 電子マネー
+    DIGITAL_PAYMENT = "デジタル決済"  # デジタル決済（PayPay等）
+    OTHER = "その他"  # その他
+
+
+class FinanceRecurrenceType(StrEnum):
+    """定期取引種別"""
+
+    DAILY = "毎日"  # 毎日
+    WEEKLY = "毎週"  # 毎週
+    MONTHLY = "毎月"  # 毎月
+    QUARTERLY = "四半期"  # 四半期
+    YEARLY = "毎年"  # 毎年
+
+
+class FinanceTaxType(StrEnum):
+    """税務区分"""
+
+    NONE = "非課税"  # 非課税
+    TAXABLE = "課税"  # 課税
+    TAX_EXEMPT = "免税"  # 免税
+    REDUCED_TAX = "軽減税率"  # 軽減税率
+
+
+class FinanceApprovalStatus(StrEnum):
+    """承認ステータス"""
+
+    PENDING = "承認待ち"  # 承認待ち
+    APPROVED = "承認済み"  # 承認済み
+    REJECTED = "却下"  # 却下
+    WITHDRAWN = "取り下げ"  # 取り下げ
+
+
+class FinanceCurrency(StrEnum):
+    """通貨"""
+
+    JPY = "JPY"  # 日本円
+    USD = "USD"  # 米ドル
+    EUR = "EUR"  # ユーロ
+    CNY = "CNY"  # 人民元
+    KRW = "KRW"  # 韓国ウォン
+
+
+
+class ApplicationStatus(StrEnum):
+    """申請ステータス"""
+
+    DRAFT = "草稿"  # 草稿
+    SUBMITTED = "申請中"  # 申請中
+    UNDER_REVIEW = "審査中"  # 審査中
+    APPROVED = "承認済み"  # 承認済み
+    REJECTED = "却下"  # 却下
+    CANCELLED = "キャンセル"  # キャンセル
+    PAID = "支払済み"  # 支払済み
+
+
+class ApplicationPriority(StrEnum):
+    """申請優先度"""
+
+    LOW = "低"  # 低
+    NORMAL = "標準"  # 標準
+    HIGH = "高"  # 高
+    URGENT = "緊急"  # 緊急
+
+
+class ApprovalLevel(StrEnum):
+    """承認レベル"""
+
+    MANAGER = "管理者"  # 管理者承認
+    FINANCE = "経理"  # 経理承認
+    DIRECTOR = "役員"  # 役員承認
+    CEO = "社長"  # 社長承認

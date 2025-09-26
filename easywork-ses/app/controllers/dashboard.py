@@ -241,7 +241,11 @@ class DashboardController:
                 month_end = month_start.replace(day=28) + timedelta(days=4)
                 month_end = month_end - timedelta(days=month_end.day)
 
-            case_count = await Case.filter(created_at__gte=month_start, created_at__lte=month_end).count()
+            # 转换为datetime对象
+            month_start_dt = datetime.combine(month_start, datetime.min.time())
+            month_end_dt = datetime.combine(month_end, datetime.min.time())
+
+            case_count = await Case.filter(created_at__gte=month_start_dt, created_at__lte=month_end_dt).count()
 
             monthly_case_trend.append({"month": month_start.strftime("%Y-%m"), "count": case_count})
 
@@ -316,11 +320,16 @@ class DashboardController:
         current_month = today.replace(day=1)
         last_month = (current_month - timedelta(days=1)).replace(day=1)
 
+        # 转换为datetime对象以便与created_at字段比较
+        today_dt = datetime.combine(today, datetime.min.time())
+        current_month_dt = datetime.combine(current_month, datetime.min.time())
+        last_month_dt = datetime.combine(last_month, datetime.min.time())
+
         # 当月签约数
-        current_month_contracts = await Contract.filter(created_at__gte=current_month, created_at__lte=today).count()
+        current_month_contracts = await Contract.filter(created_at__gte=current_month_dt, created_at__lte=today_dt).count()
 
         # 上月签约数
-        last_month_contracts = await Contract.filter(created_at__gte=last_month, created_at__lt=current_month).count()
+        last_month_contracts = await Contract.filter(created_at__gte=last_month_dt, created_at__lt=current_month_dt).count()
 
         # 签约增长率
         contract_growth_rate = 0
@@ -328,7 +337,7 @@ class DashboardController:
             contract_growth_rate = ((current_month_contracts - last_month_contracts) / last_month_contracts) * 100
 
         # 当月新增案件
-        current_month_cases = await Case.filter(created_at__gte=current_month, created_at__lte=today).count()
+        current_month_cases = await Case.filter(created_at__gte=current_month_dt, created_at__lte=today_dt).count()
 
         # 平均案件处理时间（从创建到完成）
         completed_cases = await Case.filter(status=CaseStatus.CLOSED).all()
@@ -353,7 +362,9 @@ class DashboardController:
         )
 
         # 客户满意度（基于评价）
-        recent_evaluations = await PersonEvaluation.filter(evaluation_date__gte=today - timedelta(days=90)).all()
+        ninety_days_ago = today - timedelta(days=90)
+        ninety_days_ago_dt = datetime.combine(ninety_days_ago, datetime.min.time())
+        recent_evaluations = await PersonEvaluation.filter(evaluation_date__gte=ninety_days_ago_dt).all()
 
         satisfaction_scores = [eval.overall_rating for eval in recent_evaluations if eval.overall_rating]
         avg_satisfaction = sum(satisfaction_scores) / len(satisfaction_scores) if satisfaction_scores else 0
