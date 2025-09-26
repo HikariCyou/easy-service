@@ -1,10 +1,15 @@
+import json
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from tortoise.expressions import Q
-from tortoise.transactions import in_transaction
 
 from app.core.ctx import CTX_USER_ID, CTX_USER_INFO
+from app.core.process_client import process_client
+from app.core.user_client import user_client
+
+# 工作流常量
+EXPENSE_APPROVAL_PROCESS_KEY = "TOB_COMMUTING"
 from app.models.finance import (
     FinanceTransaction,
     FinanceRecurrenceRule,
@@ -526,21 +531,52 @@ class FinanceController:
 
     # ==================== 費用申請管理 ====================
 
-    async def create_expense_application(self, data: ExpenseApplicationCreate) -> Dict[str, Any]:
+    async def create_expense_application(self, data: ExpenseApplicationCreate, token: str = None) -> Dict[str, Any]:
         """費用申請を作成"""
+        # 現在のユーザー情報を取得
+        user_id = CTX_USER_ID.get()
+        user_info = CTX_USER_INFO.get()
+
         application_data = data.dict()
 
-        # 申請番号は後でsignalで自動生成される
-        application_data.pop("application_number", None)
+        # ユーザー情報を自動設定
+        application_data["applicant_id"] = user_id
+        application_data["applicant_name"] = user_info.get("name", "")
+        application_data["department"] = user_info.get("department", "")
+
+        # 申請番号を自動生成
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        application_data["application_number"] = f"EXP{timestamp}{user_id:04d}"
 
         application = await ExpenseApplication.create(**application_data)
+
+        # 工作流を自動開始（tokenが提供された場合）
+        if token:
+            try:
+                process_instance_id = await process_client.run_process(
+                    process_key=EXPENSE_APPROVAL_PROCESS_KEY,
+                    business_key=str(application.id),
+                    variables=json.dumps({
+                        "applicant_id": user_id,
+                        "applicant_name": user_info.get("name", ""),
+                        "amount": application.amount,
+                        "application_type": application.application_type
+                    }),
+                    token=token
+                )
+                if process_instance_id:
+                    application.process_instance_id = process_instance_id
+                    await application.save()
+            except Exception as e:
+                # 工作流启动失败不影响申请创建，只记录日志
+                print(f"工作流启动失败: {e}")
 
         return {
             "application": await application.to_dict(),
             "message": "費用申請が正常に作成されました"
         }
 
-    async def get_expense_application_list(self, query: ExpenseApplicationListQuery) -> Dict[str, Any]:
+    async def get_expense_application_list(self, query: ExpenseApplicationListQuery, token: str = None) -> Dict[str, Any]:
         """費用申請一覧を取得"""
         filters = Q()
 
@@ -583,10 +619,19 @@ class FinanceController:
 
         # データ取得
         applications = await ExpenseApplication.filter(filters).select_related(
-            "case", "contract", "personnel"
+            "case"
         ).order_by("-created_at").offset(
             (query.page - 1) * query.page_size
         ).limit(query.page_size).all()
+
+        # 获取所有申请者用户信息
+        applicant_ids = [app.applicant_id for app in applications if app.applicant_id]
+        user_info_map = {}
+        if applicant_ids and token:
+            try:
+                user_info_map = await user_client.get_users_by_ids(applicant_ids, token)
+            except Exception as e:
+                print(f"获取用户信息失败: {e}")
 
         application_list = []
         for app in applications:
@@ -595,6 +640,18 @@ class FinanceController:
             app_dict["is_approved"] = app.is_approved
             app_dict["is_paid"] = app.is_paid
             app_dict["can_be_cancelled"] = app.can_be_cancelled
+
+            # 添加用户详细信息
+            if app.applicant_id in user_info_map:
+                user_info = user_info_map[app.applicant_id]
+                app_dict["applicant_detail"] = {
+                    "user_id": user_info.get("id"),
+                    "username": user_info.get("username"),
+                    "nickname": user_info.get("nickname"),
+                    "email": user_info.get("email"),
+                    "mobile": user_info.get("mobile"),
+                    "avatar": user_info.get("avatar")
+                }
             application_list.append(app_dict)
 
         return {
@@ -605,10 +662,10 @@ class FinanceController:
             "total_pages": (total + query.page_size - 1) // query.page_size
         }
 
-    async def get_expense_application_detail(self, application_id: int) -> Dict[str, Any]:
+    async def get_expense_application_detail(self, application_id: int, token: str = None) -> Dict[str, Any]:
         """費用申請詳細を取得"""
         application = await ExpenseApplication.filter(id=application_id).select_related(
-            "case", "contract", "personnel"
+            "case"
         ).first()
 
         if not application:
@@ -619,8 +676,70 @@ class FinanceController:
             application_id=application_id
         ).order_by("-action_date").all()
 
+        # 获取申请者用户信息
+        applicant_detail = {}
+        if application.applicant_id and token:
+            try:
+                user_info = await user_client.get_user_by_id(application.applicant_id, token)
+                applicant_detail = {
+                    "user_id": user_info.get("id"),
+                    "username": user_info.get("username"),
+                    "nickname": user_info.get("nickname"),
+                    "email": user_info.get("email"),
+                    "mobile": user_info.get("mobile"),
+                    "avatar": user_info.get("avatar")
+                }
+            except Exception as e:
+                print(f"获取用户信息失败: {e}")
+
+        application_dict = await application.to_dict()
+        if applicant_detail:
+            application_dict["applicant_detail"] = applicant_detail
+
         return {
-            "application": await application.to_dict(),
+            "application": application_dict,
+            "approval_history": [await hist.to_dict() for hist in approval_history],
+            "is_approved": application.is_approved,
+            "is_paid": application.is_paid,
+            "can_be_cancelled": application.can_be_cancelled
+        }
+
+    async def get_expense_application_by_process(self, process_instance_id: str, token: str = None) -> Dict[str, Any]:
+        """プロセスインスタンスIDによる費用申請詳細を取得"""
+        application = await ExpenseApplication.filter(
+            process_instance_id=process_instance_id
+        ).select_related("case").first()
+
+        if not application:
+            raise ValueError("指定されたプロセスに関連する費用申請が見つかりません")
+
+        # 承認履歴取得
+        approval_history = await ExpenseApprovalHistory.filter(
+            application_id=application.id
+        ).order_by("-action_date").all()
+
+        # 获取申请者用户信息
+        applicant_detail = {}
+        if application.applicant_id and token:
+            try:
+                user_info = await user_client.get_user_by_id(application.applicant_id, token)
+                applicant_detail = {
+                    "user_id": user_info.get("id"),
+                    "username": user_info.get("username"),
+                    "nickname": user_info.get("nickname"),
+                    "email": user_info.get("email"),
+                    "mobile": user_info.get("mobile"),
+                    "avatar": user_info.get("avatar")
+                }
+            except Exception as e:
+                print(f"获取用户信息失败: {e}")
+
+        application_dict = await application.to_dict()
+        if applicant_detail:
+            application_dict["applicant_detail"] = applicant_detail
+
+        return {
+            "application": application_dict,
             "approval_history": [await hist.to_dict() for hist in approval_history],
             "is_approved": application.is_approved,
             "is_paid": application.is_paid,

@@ -295,36 +295,20 @@ class ExpenseApplicationBase(BaseModel):
     """費用申請基本スキーマ"""
 
     application_type: str = Field(..., description="申請種別")
-    title: str = Field(..., max_length=200, description="申請タイトル")
     description: str = Field(..., description="申請内容詳細")
     amount: float = Field(..., gt=0, description="申請金額")
     expense_date_from: date = Field(..., description="費用発生日（開始）")
     expense_date_to: Optional[date] = Field(None, description="費用発生日（終了）")
     purpose: Optional[str] = Field(None, max_length=200, description="目的")
-    destination: Optional[str] = Field(None, max_length=200, description="出張先・訪問先")
     currency: FinanceCurrency = Field(default=FinanceCurrency.JPY, description="通貨")
-    priority: ApplicationPriority = Field(default=ApplicationPriority.NORMAL, description="優先度")
 
 
 class ExpenseApplicationCreate(ExpenseApplicationBase):
     """費用申請作成スキーマ"""
 
-    applicant_id: int = Field(..., description="申請者ID")
-    applicant_name: str = Field(..., max_length=100, description="申請者名")
-    department: Optional[str] = Field(None, max_length=100, description="部署")
-
-    # 関連ID
-    case_id: Optional[int] = Field(None, description="関連案件ID")
-    contract_id: Optional[int] = Field(None, description="関連契約ID")
-    personnel_id: Optional[int] = Field(None, description="関連人材ID")
-
     # 添付ファイル・備考
-    attachments: Optional[List[dict]] = Field(None, description="添付ファイル一覧")
+    attachments: Optional[List[str]] = Field(None, description="添付ファイル一覧")
     applicant_notes: Optional[str] = Field(None, description="申請者備考")
-    estimated_payment_date: Optional[date] = Field(None, description="予定支払日")
-
-    # 承認関連
-    approval_level: Optional[ApprovalLevel] = Field(None, description="必要承認レベル")
 
 
 class ExpenseApplicationUpdate(BaseModel):
@@ -404,9 +388,6 @@ class ExpenseApplicationListQuery(BaseModel):
     expense_date_to: Optional[date] = Field(None, description="費用発生日To")
     amount_min: Optional[float] = Field(None, ge=0, description="金額下限")
     amount_max: Optional[float] = Field(None, ge=0, description="金額上限")
-    case_id: Optional[int] = Field(None, description="案件ID")
-    contract_id: Optional[int] = Field(None, description="契約ID")
-    personnel_id: Optional[int] = Field(None, description="人材ID")
     search_keyword: Optional[str] = Field(None, description="検索キーワード")
     page: int = Field(default=1, ge=1, description="ページ番号")
     page_size: int = Field(default=20, ge=1, le=100, description="ページサイズ")

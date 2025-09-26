@@ -1,9 +1,12 @@
+import json
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, Header
 
 from app.controllers.finance import FinanceController
+from app.core.process_client import process_client
+from app.models.finance import ExpenseApplication
 from app.schemas import Fail, Success, SuccessExtra
 from app.schemas.finance import (
     FinanceTransactionCreate,
@@ -25,6 +28,9 @@ from app.schemas.finance import (
 
 router = APIRouter()
 finance_controller = FinanceController()
+
+# 费用申请工作流KEY
+EXPENSE_APPROVAL_PROCESS_KEY = "TOB_COMMUTING"
 
 
 # ==================== 財務取引管理 ====================
@@ -259,9 +265,12 @@ async def generate_monthly_report(
 # ==================== 費用申請管理 ====================
 
 @router.post("/expense-applications", summary="費用申請作成")
-async def create_expense_application(data: ExpenseApplicationCreate):
+async def create_expense_application(
+    data: ExpenseApplicationCreate,
+    authorization: Optional[str] = Header(None, description="token验证")
+):
     try:
-        result = await finance_controller.create_expense_application(data)
+        result = await finance_controller.create_expense_application(data, token=authorization)
         return Success(data=result["application"], msg=result["message"])
     except Exception as e:
         return Fail(msg=str(e))
@@ -281,10 +290,8 @@ async def get_expense_application_list(
     expense_date_to: Optional[date] = Query(None, description="費用発生日To"),
     amount_min: Optional[float] = Query(None, description="金額下限"),
     amount_max: Optional[float] = Query(None, description="金額上限"),
-    case_id: Optional[int] = Query(None, description="案件ID"),
-    contract_id: Optional[int] = Query(None, description="契約ID"),
-    personnel_id: Optional[int] = Query(None, description="人材ID"),
     search_keyword: Optional[str] = Query(None, description="検索キーワード"),
+    authorization: Optional[str] = Header(None, description="token验证")
 ):
     try:
         query = ExpenseApplicationListQuery(
@@ -300,13 +307,10 @@ async def get_expense_application_list(
             expense_date_to=expense_date_to,
             amount_min=amount_min,
             amount_max=amount_max,
-            case_id=case_id,
-            contract_id=contract_id,
-            personnel_id=personnel_id,
             search_keyword=search_keyword,
         )
 
-        result = await finance_controller.get_expense_application_list(query)
+        result = await finance_controller.get_expense_application_list(query, token=authorization)
 
         return SuccessExtra(
             data=result["applications"],
@@ -319,9 +323,24 @@ async def get_expense_application_list(
 
 
 @router.get("/expense-applications/{application_id}", summary="費用申請詳細取得")
-async def get_expense_application_detail(application_id: int):
+async def get_expense_application_detail(
+    application_id: int,
+    authorization: Optional[str] = Header(None, description="token验证")
+):
     try:
-        result = await finance_controller.get_expense_application_detail(application_id)
+        result = await finance_controller.get_expense_application_detail(application_id, token=authorization)
+        return Success(data=result)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.get("/expense-applications/by-process/{process_instance_id}", summary="プロセスIDによる費用申請詳細取得")
+async def get_expense_application_by_process(
+    process_instance_id: str,
+    authorization: Optional[str] = Header(None, description="token验证")
+):
+    try:
+        result = await finance_controller.get_expense_application_by_process(process_instance_id, token=authorization)
         return Success(data=result)
     except Exception as e:
         return Fail(msg=str(e))
@@ -378,5 +397,51 @@ async def get_expense_application_stats(
             period_start, period_end, applicant_id
         )
         return Success(data=result)
+    except Exception as e:
+        return Fail(msg=str(e))
+
+# ==================== ワークフロー管理 ====================
+
+@router.post("/expense-applications/{application_id}/start-workflow", summary="費用申請ワークフロー開始")
+async def start_expense_workflow(
+    application_id: int,
+    authorization: str = Header(..., description="token验证")
+):
+    """費用申請のワークフローを手動で開始"""
+    try:
+
+        # 申請が存在するかチェック
+        application = await ExpenseApplication.get_or_none(id=application_id)
+        if not application:
+            return Fail(msg="費用申請が見つかりません")
+
+        # 既にワークフロー実行中なら重複開始を防ぐ
+        if application.process_instance_id:
+            return Fail(msg="ワークフローは既に開始されています")
+
+        # ワークフロー開始
+        process_instance_id = await process_client.run_process(
+            process_key=EXPENSE_APPROVAL_PROCESS_KEY,
+            business_key=str(application.id),
+            variables=json.dumps({
+                "applicant_id": application.applicant_id,
+                "applicant_name": application.applicant_name,
+                "amount": application.amount,
+                "application_type": application.application_type,
+                "application_number": application.application_number
+            }),
+            token=authorization
+        )
+
+        if process_instance_id:
+            application.process_instance_id = process_instance_id
+            await application.save()
+            return Success(
+                data={"process_instance_id": process_instance_id},
+                msg="ワークフローが正常に開始されました"
+            )
+        else:
+            return Fail(msg="ワークフローの開始に失敗しました")
+
     except Exception as e:
         return Fail(msg=str(e))

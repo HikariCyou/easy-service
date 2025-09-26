@@ -444,15 +444,12 @@ class ExpenseApplication(BaseModel, TimestampMixin):
     expense_date_to = fields.DateField(null=True, description="費用発生日（終了）")
 
     # 申請内容
-    title = fields.CharField(max_length=200, description="申請タイトル")
+    title = fields.CharField(max_length=200,null=True, description="申請タイトル")
     description = fields.TextField(description="申請内容詳細")
     purpose = fields.CharField(max_length=200, null=True, description="目的")
-    destination = fields.CharField(max_length=200, null=True, description="出張先・訪問先")
 
     # 業務関連
     case = fields.ForeignKeyField("models.Case", null=True, related_name="expense_applications", description="関連案件")
-    contract = fields.ForeignKeyField("models.Contract", null=True, related_name="expense_applications", description="関連契約")
-    personnel = fields.ForeignKeyField("models.Personnel", null=True, related_name="expense_applications", description="関連人材")
 
     # ステータス管理
     status = fields.CharEnumField(ApplicationStatus, default=ApplicationStatus.DRAFT, description="申請ステータス")
@@ -478,6 +475,9 @@ class ExpenseApplication(BaseModel, TimestampMixin):
     attachments = fields.JSONField(null=True, description="添付ファイル一覧")  # レシート、領収書等
     internal_notes = fields.TextField(null=True, description="内部メモ")
     applicant_notes = fields.TextField(null=True, description="申請者備考")
+
+    # 工作流相关
+    process_instance_id = fields.CharField(max_length=255, null=True, description="工作流实例ID")
 
     # 関連
     approval_history: fields.ReverseRelation["ExpenseApprovalHistory"]
