@@ -18,6 +18,7 @@ from app.schemas.finance import (
     FinanceBudgetCreate,
     FinanceBudgetUpdate,
     FinanceAnalyticsQuery,
+    FinanceReportGenerateRequest,
     ExpenseApplicationCreate,
     ExpenseApplicationUpdate,
     ExpenseApplicationListQuery,
@@ -185,6 +186,7 @@ async def execute_recurrence_rules():
         return Fail(msg=str(e))
 
 
+
 # ==================== 予算管理 ====================
 
 @router.post("/budgets", summary="予算作成")
@@ -254,6 +256,36 @@ async def generate_monthly_report(
             data={
                 "report": result["report"],
                 "analytics": result["analytics"]
+            },
+            msg=result["message"]
+        )
+    except Exception as e:
+        return Fail(msg=str(e))
+
+
+@router.post("/reports/custom", summary="カスタム期間財務レポート生成")
+async def generate_custom_report(request: FinanceReportGenerateRequest):
+    """
+    任意期間の財務レポートを生成
+    - 期間指定自由（日・週・月・四半期・年度等）
+    - 収入・支出の概览
+    - カテゴリ別分析
+    - 詳細取引データ（オプション）
+    - チャート・グラフデータ（オプション）
+    """
+    try:
+        result = await finance_controller.generate_custom_report(request)
+        return Success(
+            data={
+                "report": result["report"],
+                "analytics": result["analytics"],
+                "transaction_details": result.get("transaction_details"),
+                "summary": {
+                    "period": f"{request.period_start} ～ {request.period_end}",
+                    "report_type": request.report_type,
+                    "include_details": request.include_details,
+                    "include_charts": request.include_charts
+                }
             },
             msg=result["message"]
         )

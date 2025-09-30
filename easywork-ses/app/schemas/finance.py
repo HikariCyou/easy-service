@@ -276,6 +276,19 @@ class FinanceAnalyticsQuery(BaseModel):
     include_projections: bool = Field(default=False, description="予測データを含むか")
 
 
+class FinanceReportGenerateRequest(BaseModel):
+    """財務レポート生成リクエストスキーマ"""
+
+    period_start: date = Field(..., description="レポート期間開始日")
+    period_end: date = Field(..., description="レポート期間終了日")
+    report_name: Optional[str] = Field(None, max_length=100, description="レポート名（自動生成されない場合）")
+    report_type: str = Field(default="custom", pattern="^(monthly|quarterly|yearly|custom)$", description="レポート種別")
+    include_details: bool = Field(default=True, description="詳細データを含めるか")
+    include_charts: bool = Field(default=True, description="チャートデータを含めるか")
+    transaction_type: Optional[FinanceTransactionType] = Field(None, description="対象取引種別（指定なしは全て）")
+    categories: Optional[List[str]] = Field(None, description="対象カテゴリ（指定なしは全て）")
+
+
 class FinanceAnalyticsResponse(BaseModel):
     """財務分析レスポンススキーマ"""
 

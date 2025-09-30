@@ -541,6 +541,9 @@ class RequestController:
     @staticmethod
     async def mark_as_paid(request_id: int, payment_data: RequestPaymentUpdate) -> bool:
         """支払完了マーク"""
+        from app.models.finance import FinanceTransaction
+        from app.models.enums import FinanceTransactionType, FinanceStatus, FinanceApprovalStatus, FinanceCurrency
+
         request = await Request.get_or_none(id=request_id)
         if not request:
             return False
@@ -557,6 +560,42 @@ class RequestController:
             request.payment_received_date = payment_data.payment_received_date
         else:
             request.payment_received_date = datetime.now()
+
+        # === 重要：FinanceTransactionに収入記録を作成 ===
+        # 1. 重複チェック：既に同じ請求書のFinanceTransactionが存在するかチェック
+        existing_transaction = await FinanceTransaction.filter(request_id=request_id).first()
+
+        if not existing_transaction:
+            # 2. 新しいFinanceTransaction記録を作成
+            payment_amount = float(payment_data.payment_amount) if payment_data.payment_amount else float(request.request_amount)
+
+            # Client会社情報を取得
+            await request.fetch_related("client_company")
+
+            # 取引番号生成
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            transaction_number = f"TXN-{timestamp}-{request_id:03d}"
+
+            # FinanceTransaction作成
+            await FinanceTransaction.create(
+                transaction_number=transaction_number,
+                transaction_type=FinanceTransactionType.INCOME,
+                title=f"請求書入金 - {request.client_company.company_name} ({request.year_month})",
+                description=f"請求書番号: {request.request_number}",
+                amount=payment_amount,
+                currency=FinanceCurrency.JPY,
+                category="要員",
+                counterpart=request.client_company.company_name,
+                reference_number=request.request_number,
+                request_id=request_id,
+                payment_date=payment_data.payment_received_date or datetime.now().date(),
+                status=FinanceStatus.COMPLETED,
+                approval_status=FinanceApprovalStatus.APPROVED,
+                requested_by="System",
+                approved_by="System",
+                approved_at=datetime.now(),
+                payment_method="銀行振込"
+            )
 
         await request.mark_as_paid(float(payment_data.payment_amount) if payment_data.payment_amount else None)
         return True

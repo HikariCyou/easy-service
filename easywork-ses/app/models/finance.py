@@ -59,6 +59,7 @@ class FinanceTransaction(BaseModel, TimestampMixin):
     case = fields.ForeignKeyField("models.Case", null=True, related_name="finance_transactions", description="関連案件")
     contract = fields.ForeignKeyField("models.Contract", null=True, related_name="finance_transactions", description="関連契約")
     personnel = fields.ForeignKeyField("models.Personnel", null=True, related_name="finance_transactions", description="関連人材")
+    request = fields.ForeignKeyField("models.Request", null=True, related_name="finance_transactions", description="関連請求書")
 
     # 定期取引情報
     is_recurring = fields.BooleanField(default=False, description="定期取引フラグ")

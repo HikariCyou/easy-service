@@ -470,7 +470,7 @@ class TimeCalculationType(StrEnum):
 # 財務管理関連のEnum定義
 class FinanceTransactionType(StrEnum):
     """財務取引種別"""
-
+    NONE = ""  # 未設定
     INCOME = "INCOME"  # 収入
     EXPENSE = "EXPENSE"  # 支出
 
