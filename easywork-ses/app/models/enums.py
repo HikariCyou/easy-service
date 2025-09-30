@@ -217,6 +217,13 @@ class MarriageStatus(StrEnum):
     OTHER = "その他"  # その他
 
 
+class WorkLocation(StrEnum):
+    """勤務地"""
+    REMOTE = "在宅"  # 在宅勤務
+    ONSITE = "現場"  # 現場勤務
+
+
+
 # Enum定義
 class ContractStatus(StrEnum):
     ACTIVE = "有効"  # 有効

@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+from app.models.enums import WorkLocation
 
 
 class DailyAttendanceSchema(BaseModel):
@@ -33,6 +34,9 @@ class DailyAttendanceSchema(BaseModel):
     # 出勤区分
     attendance_type: str = Field(..., description="出勤区分")
 
+    # 勤務地
+    work_location: str = Field(..., description="勤務地（在宅/現場）")
+
     # 承認状況
     approved_status: str = Field("PENDING", description="承認ステータス")
     is_approved: Optional[bool] = Field(None, description="承認済みフラグ（計算値）")
@@ -61,6 +65,7 @@ class CreateDailyAttendanceSchema(BaseModel):
     evening_break_minutes: int = Field(0, description="夜休憩時間（分）")
     other_break_minutes: int = Field(0, description="その他休憩時間（分）")
     attendance_type: str = Field("NORMAL", description="出勤区分")
+    work_location: str = Field(..., description="勤務地（在宅/現場）")
     remark: Optional[str] = Field(None, description="備考")
 
 
@@ -73,6 +78,7 @@ class UpdateDailyAttendanceSchema(BaseModel):
     evening_break_minutes: Optional[int] = Field(None, description="夜休憩時間（分）")
     other_break_minutes: Optional[int] = Field(None, description="その他休憩時間（分）")
     attendance_type: Optional[str] = Field(None, description="出勤区分")
+    work_location: Optional[str] = Field(None, description="勤務地（在宅/現場）")
     remark: Optional[str] = Field(None, description="備考")
 
 

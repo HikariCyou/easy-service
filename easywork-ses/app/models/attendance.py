@@ -10,6 +10,7 @@ from app.models.enums import (
     AttendanceType,
     DecimalProcessingType,
     WeeklyMoodStatus,
+    WorkLocation,
 )
 
 
@@ -38,6 +39,9 @@ class DailyAttendance(BaseModel, TimestampMixin):
 
     # 出勤区分
     attendance_type = fields.CharEnumField(AttendanceType, default=AttendanceType.NORMAL, description="出勤区分")
+
+    # 勤務地（必須）
+    work_location = fields.CharEnumField(WorkLocation, default=WorkLocation.ONSITE, description="勤務地（在宅/現場）")
 
     # 日次考勤记录不需要审批状态，审批在月次层面进行
     # approved_status 已移至 MonthlyAttendance

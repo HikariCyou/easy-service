@@ -72,6 +72,7 @@ class AttendanceController:
             evening_break_minutes=attendance_data.evening_break_minutes,
             other_break_minutes=attendance_data.other_break_minutes,
             attendance_type=attendance_data.attendance_type,
+            work_location=attendance_data.work_location,
             remark=attendance_data.remark,
         )
 
@@ -148,7 +149,15 @@ class AttendanceController:
         # 変換
         items = []
         for attendance in attendances:
+            # 为没有work_location的旧记录设置默认值
+            if not attendance.work_location or attendance.work_location == '':
+                attendance.work_location = "在宅"  # 默认为在宅勤务
+
             attendance_dict = await attendance.to_dict()
+            # 再次确保work_location不为空
+            if not attendance_dict.get("work_location") or attendance_dict.get("work_location") == '':
+                attendance_dict["work_location"] = "在宅"
+
             # 日付関連情報を追加
             attendance_dict["weekday"] = attendance.weekday
             attendance_dict["weekday_name"] = attendance.weekday_name_jp
@@ -172,7 +181,15 @@ class AttendanceController:
         if not attendance:
             return None
 
+        # 为没有work_location的旧记录设置默认值
+        if not attendance.work_location or attendance.work_location == '':
+            attendance.work_location = "在宅"  # 默认为在宅勤务
+
         attendance_dict = await attendance.to_dict()
+        # 再次确保work_location不为空
+        if not attendance_dict.get("work_location") or attendance_dict.get("work_location") == '':
+            attendance_dict["work_location"] = "在宅"
+
         if attendance.contract:
             attendance_dict["contract"] = await attendance.contract.to_dict()
 
@@ -323,7 +340,16 @@ class AttendanceController:
             }
 
             if attendance:
-                day_data["attendance"] = await attendance.to_dict()
+                # 为没有work_location的旧记录设置默认值
+                if not attendance.work_location or attendance.work_location == '':
+                    attendance.work_location = "在宅"  # 默认为在宅勤务
+
+                attendance_dict = await attendance.to_dict()
+                # 再次确保work_location不为空
+                if not attendance_dict.get("work_location") or attendance_dict.get("work_location") == '':
+                    attendance_dict["work_location"] = "在宅"
+
+                day_data["attendance"] = attendance_dict
                 actual_working_days += 1
                 if attendance.actual_working_hours:
                     total_hours += attendance.actual_working_hours
@@ -538,7 +564,15 @@ class AttendanceController:
         total_working_hours = 0.0
 
         for record in attendance_records:
+            # 为没有work_location的旧记录设置默认值
+            if not record.work_location or record.work_location == '':
+                record.work_location = "在宅"  # 默认为在宅勤务
+
             record_dict = await record.to_dict()
+            # 再次确保work_location不为空
+            if not record_dict.get("work_location") or record_dict.get("work_location") == '':
+                record_dict["work_location"] = "在宅"
+
             record_dict["actual_working_hours"] = record.actual_working_hours
             if record.contract:
                 record_dict["contract"] = await record.contract.to_dict()
@@ -1043,6 +1077,10 @@ class AttendanceController:
             if hasattr(record, "contract"):
                 record._contract_cached = record.contract
 
+            # 为没有work_location的旧记录设置默认值
+            if not record.work_location or record.work_location == '':
+                record.work_location = "在宅"  # 默认为在宅勤务
+
             hours = record.actual_working_hours or 0.0
             total_working_hours += float(hours)
 
@@ -1054,7 +1092,11 @@ class AttendanceController:
                 absence_days += 1
 
             # 直接使用to_dict，不要手动转换
-            daily_list.append(await record.to_dict())
+            record_dict = await record.to_dict()
+            # 再次确保work_location不为空
+            if not record_dict.get("work_location") or record_dict.get("work_location") == '':
+                record_dict["work_location"] = "在宅"
+            daily_list.append(record_dict)
 
         # 组装返回数据
         result = {
